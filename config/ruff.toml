@@ -1,0 +1,24 @@
+line-length = 120
+required-version = ">=0.13.1"
+
+include = ["projects/**/*.py"]
+
+extend-exclude = [
+    "projects/dissect.eventlog", # Formatted using black
+]
+
+[format]
+docstring-code-format = true
+
+[lint]
+select = [
+  "F", "E", "W", "I", "UP", "YTT", "ANN", "B", "C4", "DTZ", "T10",
+  "FA", "ISC", "G", "INP", "PIE", "PYI", "PT", "Q", "RSE", "RET",
+  "SLOT", "SIM", "TID", "TCH", "PTH", "PLC", "TRY", "FLY", "PERF",
+  "FURB", "RUF",
+]
+ignore = ["E203", "B904", "UP024", "ANN002", "ANN003", "ANN204", "ANN401", "SIM105", "TRY003"]
+
+[lint.per-file-ignores]
+"**/tests/{docs,_docs}/**" = ["INP001"]
+"**/*.pyi" = ["E", "F", "F401", "PYI"]
