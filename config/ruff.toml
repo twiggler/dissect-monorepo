@@ -4,7 +4,9 @@ required-version = ">=0.13.1"
 include = ["projects/**/*.py"]
 
 extend-exclude = [
-    "projects/dissect.eventlog", # Formatted using black
+    "projects/dissect.contrib",  # Template project 
+    "projects/dissect.eventlog", # Formatted using black (?!?)
+    "projects/*/examples"        # Skip examples
 ]
 
 [format]
@@ -20,5 +22,10 @@ select = [
 ignore = ["E203", "B904", "UP024", "ANN002", "ANN003", "ANN204", "ANN401", "SIM105", "TRY003"]
 
 [lint.per-file-ignores]
-"**/tests/{docs,_docs}/**" = ["INP001"]
+"**tests/**" = ["S101", "PLC0415"]
+"**/tests/_docs/**" = ["INP001"]
 "**/*.pyi" = ["E", "F", "F401", "PYI"]
+
+"projects/dissect.target/**" = ["PLC0415"]                 
+"projects/dissect.target/dissect/target/helpers/magic/mimetypes/**" = ["E501"]
+

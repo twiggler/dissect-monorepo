@@ -2,18 +2,9 @@
 set -e
 
 # Configuration
-PROJECTS_FILE="project-list"
+SCRIPT_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
+PROJECTS_FILE="$SCRIPT_DIR/project-list"
 BASE_URL="git@github.com:fox-it"
-
-# Check if projects file exists (looking in current dir or one level up)
-if [ ! -f "$PROJECTS_FILE" ]; then
-    if [ -f "../$PROJECTS_FILE" ]; then
-        PROJECTS_FILE="../$PROJECTS_FILE"
-    else
-        echo "Error: $PROJECTS_FILE not found in current or parent directory."
-        exit 1
-    fi
-fi
 
 # Safety check: Ensure we are in a git repo and have a projects folder
 if [ ! -d ".git" ]; then
@@ -45,7 +36,10 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     pushd "$TEMP_CLONE" > /dev/null
     
     # Rewrite history into the projects/ folder
-    git filter-repo --to-subdirectory-filter "projects/$REPO_PATH"
+    # Also move a top-level `dissect/` directory (if present) into `src/dissect/`
+    # so the monorepo layout becomes: projects/<repo>/src/dissect/...
+    git filter-repo --to-subdirectory-filter "projects/$REPO_PATH" \
+        --path-rename "projects/$REPO_PATH/dissect/:projects/$REPO_PATH/src/dissect/"
     
     popd > /dev/null
 
