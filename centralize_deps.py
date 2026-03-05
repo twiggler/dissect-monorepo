@@ -88,8 +88,5 @@ def main():
     for toml_path in PROJECTS_DIR.rglob("pyproject.toml"):
         clean_subproject(toml_path)
 
-    print("\n----------------------------------------------------")
-    print("Run 'uv lock' to apply changes.")
-
 if __name__ == "__main__":
     main()

@@ -2,26 +2,15 @@
 set -e
 
 # Configuration
-PROJECTS_FILE="project-list"
+SCRIPT_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
+CONFIG_DIR="$SCRIPT_DIR/config"
+PYPROJECTS_FILE="$CONFIG_DIR/pyproject.toml"
+PROJECTS_FILE="$SCRIPT_DIR/project-list"
 BASE_URL="git@github.com:fox-it"
 
-# Check if projects file exists (looking in current dir or one level up)
-if [ ! -f "$PROJECTS_FILE" ]; then
-    if [ -f "../$PROJECTS_FILE" ]; then
-        PROJECTS_FILE="../$PROJECTS_FILE"
-    else
-        echo "Error: $PROJECTS_FILE not found in current or parent directory."
-        exit 1
-    fi
-fi
-
-# Safety check: Ensure we are in a git repo and have a projects folder
-if [ ! -d ".git" ]; then
-    echo "Error: You must run this script from the root of your git repository."
-    exit 1
-fi
-
+# Initialize Monorepo
 mkdir -p "projects"
+cp "$PYPROJECTS_FILE" "pyproject.toml"
 
 # 1. Read and Process Repositories
 while IFS= read -r line || [[ -n "$line" ]]; do
@@ -43,9 +32,13 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     git clone "$BASE_URL/$REPO_PATH.git" "$TEMP_CLONE"
     
     pushd "$TEMP_CLONE" > /dev/null
+    git lfs fetch --all origin
     
     # Rewrite history into the projects/ folder
-    git filter-repo --to-subdirectory-filter "projects/$REPO_PATH"
+    # Also move a top-level `dissect/` directory (if present) into `src/dissect/`
+    # so the monorepo layout becomes: projects/<repo>/src/dissect/...
+    git filter-repo --to-subdirectory-filter "projects/$REPO_PATH" \
+        --path-rename "projects/$REPO_PATH/dissect/:projects/$REPO_PATH/src/dissect/"
     
     popd > /dev/null
 
@@ -61,16 +54,17 @@ while IFS= read -r line || [[ -n "$line" ]]; do
 
     # Perform the merge with history preservation
     git merge "origin_repo/$BRANCH" --allow-unrelated-histories -m "Merge $REPO_PATH into monorepo"
+
+    # Internalize LFS objects by fetching them into the monorepo's LFS cache
+    git lfs fetch origin_repo --all
     
     # Cleanup remote and temp files
     git remote remove origin_repo
     rm -rf "$TEMP_CLONE"
 
-done < "$PROJECTS_FILE"
+    # Unset any LFS URL that might have come from the individual repo
+    git config --unset lfs.url || true
 
-# 2. Re-sync the uv Workspace
-echo "----------------------------------------------------"
-echo "Updating uv lockfile..."
-uv lock
+done < "$PROJECTS_FILE"
 
 echo "Migration of all projects from $PROJECTS_FILE complete!"

@@ -7,9 +7,10 @@ from pathlib import Path
 import shutil
 
 # --- CONFIGURATION ---
-PROJECTS_DIR = Path("projects")
+SCRIPT_DIR = Path(__file__).parent
+PROJECTS_DIR =  Path("projects")
 ROOT_TOML = Path("pyproject.toml")
-RUFF_CONFIG_FILE = Path("dissect-monorepo-scripts/config/ruff.toml")
+RUFF_CONFIG_FILE = SCRIPT_DIR / "config/ruff.toml"
 # ---------------------
 
 def strip_ruff_from_toml(file_path):

@@ -2,7 +2,6 @@
 # dependencies = ["tomlkit"]
 # ///
 
-import os
 import tomlkit
 from pathlib import Path
 

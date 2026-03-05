@@ -1,6 +1,7 @@
 #!/bin/bash
 
-PROJECTS_FILE="project-list"
+SCRIPT_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
+PROJECTS_FILE="$SCRIPT_DIR/project-list"
 BASE_API="https://api.github.com/repos/fox-it"
 
 if [ ! -f "$PROJECTS_FILE" ]; then
@@ -50,7 +51,3 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     fi
 
 done < "$PROJECTS_FILE"
-
-echo "----------------------------------------------------"
-echo "Finalizing workspace with uv..."
-uv lock
