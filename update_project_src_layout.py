@@ -1,0 +1,121 @@
+# /// script
+# dependencies = ["tomlkit"]
+# ///
+
+"""Update pyproject.toml files in projects/ for a correct src/ layout.
+
+Two fixes are applied to every project:
+
+1. [build-system] backend-path — For projects using a custom local build
+   backend (build-backend = "_build"), the backend-path must point to the
+   directory that contains _build.py.  In a src/ layout the correct value is
+   e.g. "src/dissect/util" rather than "dissect/util".
+
+2. [tool.setuptools.packages.find] where — Without `where = ["src"]`,
+   setuptools scans the project root and finds nothing, resulting in an empty
+   editable-install finder.  This fix adds the missing directive so that
+   packages installed in editable mode are discoverable at import time.
+"""
+
+import tomlkit
+from pathlib import Path
+
+
+def _find_build_py(project_root: Path, module: str) -> Path | None:
+    """Return the directory that contains <module>.py, searching under project_root."""
+    for candidate in project_root.rglob(f"{module}.py"):
+        return candidate.parent
+    return None
+
+
+def patch_pyproject(file_path: Path) -> None:
+    print(f"Processing {file_path}...")
+    project_root = file_path.parent
+
+    with open(file_path, "r", encoding="utf-8") as f:
+        doc = tomlkit.parse(f.read())
+
+    changed = False
+    changed |= _fix_backend_path(doc, project_root)
+    changed |= _fix_packages_find_where(doc, project_root)
+
+    if changed:
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(tomlkit.dumps(doc))
+        print(f"  [✓] Updated {file_path}")
+
+
+def _fix_backend_path(doc: tomlkit.TOMLDocument, project_root: Path) -> bool:
+    build_system = doc.get("build-system", {})
+    backend_path = build_system.get("backend-path")
+    build_backend = build_system.get("build-backend")
+
+    if not backend_path or not build_backend:
+        print("  [-] backend-path: no backend-path / build-backend found, skipping.")
+        return False
+
+    # Only relevant for local (non-dotted) backends like "_build"
+    if "." in build_backend:
+        print(f"  [-] backend-path: '{build_backend}' looks like a PyPI package, skipping.")
+        return False
+
+    actual_dir = _find_build_py(project_root, build_backend)
+    if actual_dir is None:
+        print(f"  [!] backend-path: could not find '{build_backend}.py' under {project_root}, skipping.")
+        return False
+
+    correct_path = str(actual_dir.relative_to(project_root))
+
+    if backend_path == [correct_path]:
+        print(f"  [✓] backend-path already correct: {backend_path}")
+        return False
+
+    print(f"  [~] backend-path: {backend_path} → ['{correct_path}']")
+    doc["build-system"]["backend-path"] = [correct_path]
+    return True
+
+
+def _fix_packages_find_where(doc: tomlkit.TOMLDocument, project_root: Path) -> bool:
+    """Ensure [tool.setuptools.packages.find] has where = ["src"] for src layouts."""
+    src_dir = project_root / "src"
+    if not src_dir.is_dir():
+        print("  [-] packages.find where: no src/ directory, skipping.")
+        return False
+
+    tool = doc.get("tool", {})
+    setuptools = tool.get("setuptools", {})
+    packages = setuptools.get("packages", {})
+    find = packages.get("find", {})
+
+    current_where = find.get("where")
+    if current_where == ["src"]:
+        print("  [✓] packages.find where already correct.")
+        return False
+
+    # Build the nested structure if any level is missing
+    if "tool" not in doc:
+        doc.add("tool", tomlkit.table())
+    if "setuptools" not in doc["tool"]:
+        doc["tool"].add("setuptools", tomlkit.table())
+    if "packages" not in doc["tool"]["setuptools"]:
+        doc["tool"]["setuptools"].add("packages", tomlkit.table())
+    if "find" not in doc["tool"]["setuptools"]["packages"]:
+        doc["tool"]["setuptools"]["packages"].add("find", tomlkit.table())
+
+    print(f"  [~] packages.find where: {current_where!r} → ['src']")
+    doc["tool"]["setuptools"]["packages"]["find"]["where"] = ["src"]
+    return True
+
+
+def main() -> None:
+    projects_dir = Path("projects")
+    if not projects_dir.exists():
+        print("Error: 'projects' directory not found.")
+        return
+
+    for toml_path in sorted(projects_dir.rglob("pyproject.toml")):
+        patch_pyproject(toml_path)
+
+
+if __name__ == "__main__":
+    main()
