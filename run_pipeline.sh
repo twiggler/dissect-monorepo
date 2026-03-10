@@ -35,5 +35,9 @@ run uv run "$SCRIPT_DIR/centralize_deps.py"
 echo "Running centralize_ruff_config.py"
 run uv run "$SCRIPT_DIR/centralize_ruff_config.py"
 
+# 6. fix_backend_path.py (python via uv)
+echo "Running fix_backend_path.py"
+run uv run "$SCRIPT_DIR/fix_backend_path.py"
+
 echo
 echo "Pipeline complete."
