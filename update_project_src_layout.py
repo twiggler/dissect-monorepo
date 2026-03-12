@@ -22,6 +22,12 @@ Two fixes are applied to every project:
    directory, breaking tests that rely on rootdir (e.g. LFS tracking tests).
    Adding an empty table with `testpaths = ["tests"]` anchors rootdir to
    the project directory.
+
+Project-specific fixes:
+
+- dissect.fve: adds an `argon2` optional extra with `argon2-cffi` so that
+  the Argon2 password-hashing fallback works without building the native
+  Rust extension.  This mirrors the `argon2-cffi` entry that was in tox.ini.
 """
 
 import tomlkit
@@ -46,6 +52,7 @@ def patch_pyproject(file_path: Path) -> None:
     changed |= _fix_backend_path(doc, project_root)
     changed |= _fix_packages_find_where(doc, project_root)
     changed |= _fix_pytest_ini_options(doc, project_root)
+    changed |= _fix_fve_argon2_extra(doc, project_root)
 
     if changed:
         with open(file_path, "w", encoding="utf-8") as f:
@@ -137,6 +144,30 @@ def _fix_pytest_ini_options(doc: tomlkit.TOMLDocument, project_root: Path) -> bo
     doc["tool"]["pytest"].add("ini_options", ini_options)
 
     print("  [~] pytest.ini_options: added with testpaths = ['tests']")
+    return True
+
+
+def _fix_fve_argon2_extra(doc: tomlkit.TOMLDocument, project_root: Path) -> bool:
+    """Add argon2 optional extra to dissect.fve so argon2-cffi is installed via --all-extras.
+
+    dissect.fve has a native Rust Argon2 extension with argon2-cffi as a pure-Python
+    fallback.  The fallback was previously listed in tox.ini deps but never declared
+    as a project dependency, so it was missing in the uv workspace.  Adding it as an
+    optional extra means --all-extras in the Justfile recipe picks it up automatically.
+    """
+    project_name = doc.get("project", {}).get("name", "")
+    if project_name != "dissect.fve":
+        return False
+
+    opt_deps = doc.get("project", {}).get("optional-dependencies", {})
+    if "argon2" in opt_deps:
+        print("  [✓] fve argon2 extra already present.")
+        return False
+
+    argon2_array = tomlkit.array()
+    argon2_array.append("argon2-cffi")
+    doc["project"]["optional-dependencies"]["argon2"] = argon2_array
+    print("  [~] fve: added argon2 optional extra with argon2-cffi")
     return True
 
 
