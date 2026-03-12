@@ -11,7 +11,7 @@ BASE_URL="git@github.com:fox-it"
 # Initialize Monorepo
 mkdir -p "projects"
 cp "$PYPROJECTS_FILE" "pyproject.toml"
-cp "$CONFIG_DIR/Justfile" "Justfile"
+ln -sf "$CONFIG_DIR/Justfile" "Justfile"
 
 # 1. Read and Process Repositories
 while IFS= read -r line || [[ -n "$line" ]]; do

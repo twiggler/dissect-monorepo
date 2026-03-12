@@ -8,12 +8,12 @@
 PY_VERSIONS := "3.10 3.11 3.12"
 
 # Run pytest for a single project using `uv` to create the environment.
-# uv installs the named workspace member (and all its local deps) as editable,
-# then runs pytest scoped to that project's tests directory.
+# --all-packages installs all workspace members as editable so sibling deps are importable.
+# --all-extras ensures optional dependencies (e.g. backports.zstd) are available.
 # Example: just test dissect.xfs 3.11
-# Example: just test dissect.xfs 3.11 -- -k test_foo
+# Example: just test dissect.xfs 3.11 "-k test_foo"
 test project env args="":
-    uv run --package {{project}} --python {{env}} --group test pytest projects/{{project}} {{args}}
+    uv run --group dev --all-packages --all-extras --python {{env}} pytest projects/{{project}} {{args}}
 
 # Run pytest for every project and for each Python version in `PY_VERSIONS`.
 # Skips directories that don't have a pyproject.toml.

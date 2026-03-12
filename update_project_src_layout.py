@@ -15,6 +15,13 @@ Two fixes are applied to every project:
    setuptools scans the project root and finds nothing, resulting in an empty
    editable-install finder.  This fix adds the missing directive so that
    packages installed in editable mode are discoverable at import time.
+
+3. [tool.pytest.ini_options] — pytest determines rootdir by walking upward
+   from the test paths looking for a config file.  Without this table,
+   pytest anchors rootdir to the monorepo root rather than the project
+   directory, breaking tests that rely on rootdir (e.g. LFS tracking tests).
+   Adding an empty table with `testpaths = ["tests"]` anchors rootdir to
+   the project directory.
 """
 
 import tomlkit
@@ -38,6 +45,7 @@ def patch_pyproject(file_path: Path) -> None:
     changed = False
     changed |= _fix_backend_path(doc, project_root)
     changed |= _fix_packages_find_where(doc, project_root)
+    changed |= _fix_pytest_ini_options(doc, project_root)
 
     if changed:
         with open(file_path, "w", encoding="utf-8") as f:
@@ -104,6 +112,31 @@ def _fix_packages_find_where(doc: tomlkit.TOMLDocument, project_root: Path) -> b
 
     print(f"  [~] packages.find where: {current_where!r} → ['src']")
     doc["tool"]["setuptools"]["packages"]["find"]["where"] = ["src"]
+    return True
+
+
+def _fix_pytest_ini_options(doc: tomlkit.TOMLDocument, project_root: Path) -> bool:
+    """Ensure [tool.pytest.ini_options] exists to anchor pytest rootdir to the project."""
+    src_dir = project_root / "src"
+    if not src_dir.is_dir():
+        print("  [-] pytest.ini_options: no src/ directory, skipping.")
+        return False
+
+    tool = doc.get("tool", {})
+    pytest_opts = tool.get("pytest", {}).get("ini_options")
+    if pytest_opts is not None:
+        print("  [✓] pytest.ini_options already present.")
+        return False
+
+    if "tool" not in doc:
+        doc.add("tool", tomlkit.table())
+    if "pytest" not in doc["tool"]:
+        doc["tool"].add("pytest", tomlkit.table(is_super_table=True))
+    ini_options = tomlkit.table()
+    ini_options.add("testpaths", ["tests"])
+    doc["tool"]["pytest"].add("ini_options", ini_options)
+
+    print("  [~] pytest.ini_options: added with testpaths = ['tests']")
     return True
 
 
