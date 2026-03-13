@@ -1,0 +1,2 @@
+unstable_python:
+  packageManager: 'uv'

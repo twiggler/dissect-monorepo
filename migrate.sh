@@ -12,6 +12,7 @@ BASE_URL="git@github.com:fox-it"
 mkdir -p "projects"
 cp "$PYPROJECTS_FILE" "pyproject.toml"
 ln -sf "$CONFIG_DIR/Justfile" "Justfile"
+ln -sfn "$CONFIG_DIR/moon" ".moon"
 
 # 1. Read and Process Repositories
 while IFS= read -r line || [[ -n "$line" ]]; do

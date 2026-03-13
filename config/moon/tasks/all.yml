@@ -1,0 +1,35 @@
+# Inherited tasks for all projects in the monorepo.
+# Run a specific version:   moon run dissect.xfs:test-3.10
+# Run all projects:         moon run :test-3.10
+# Run all versions:         moon run :test-3.10 :test-3.11 :test-3.12
+
+tasks:
+  # Internal base task — not invoked directly.
+  # Delegates to the just recipe so the full uv invocation stays in one place.
+  _test:
+    command: just
+    args:
+      - test
+      - $project
+      - $PYTHON_VERSION
+    env:
+      PYTHON_VERSION: "3.10"
+    options:
+      runFromWorkspaceRoot: true
+    inputs:
+      - src/**/*.py
+      - tests/**/*.py
+      - pyproject.toml
+
+  test-3.10:
+    extends: _test
+
+  test-3.11:
+    extends: _test
+    env:
+      PYTHON_VERSION: "3.11"
+
+  test-3.12:
+    extends: _test
+    env:
+      PYTHON_VERSION: "3.12"
