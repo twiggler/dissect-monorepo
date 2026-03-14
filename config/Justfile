@@ -2,6 +2,8 @@
 # Usage:
 #   just test-all
 #   just test <project> <env>
+#   just test-affected
+#   just test-affected origin/master 3.11
 
 
 # Python versions to try for `test-all` (space-separated)
@@ -26,4 +28,19 @@ test-all:
                 just --justfile {{justfile()}} test $$project_name $$py_version; \
             done; \
         fi; \
+    done
+
+# Run tests only for packages affected by changes vs a base ref.
+# Example: just test-affected origin/master 3.11
+test-affected ref="origin/master" env="3.10":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    packages=$(git diff --name-only {{ref}} | uv run python scripts/affected_tests.py)
+    if [ -z "$packages" ]; then
+        echo "No packages affected. Nothing to do."
+        exit 0
+    fi
+    echo "Affected packages: $packages"
+    for pkg in $packages; do
+        just --justfile {{justfile()}} test "$pkg" {{env}}
     done
