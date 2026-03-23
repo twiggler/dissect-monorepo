@@ -2,9 +2,22 @@
 set -euo pipefail
 
 # Wrapper to run migration and post-processing steps in order.
-# Usage: ./run_pipeline.sh
+# Usage: ./run_pipeline.sh [TARGET_DIR]
+#   TARGET_DIR  Directory to (re)create the monorepo in.
+#               Defaults to a sibling directory named 'dissect-monorepo'.
+#               The directory is wiped and re-initialised as a fresh git repo.
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
+TARGET_DIR=$(realpath -m "${1:-$SCRIPT_DIR/../dissect-monorepo}")
+
+echo "Target: $TARGET_DIR"
+if [[ -e "$TARGET_DIR" ]]; then
+  echo "Error: TARGET_DIR ($TARGET_DIR) already exists. Remove it manually before running." >&2
+  exit 1
+fi
+mkdir -p "$TARGET_DIR"
+cd "$TARGET_DIR"
+git init
 
 run() {
   echo
