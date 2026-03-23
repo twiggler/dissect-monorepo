@@ -26,5 +26,6 @@ ignore = ["E203", "B904", "UP024", "ANN002", "ANN003", "ANN204", "ANN401", "SIM1
 "**/tests/_docs/**" = ["INP001"]
 "**/*.pyi" = ["E", "F", "F401", "PYI"]
 
-"projects/dissect.target/**" = ["PLC0415"]                 
+"projects/dissect.target/**" = ["PLC0415"]
+"projects/dissect.cstruct/**" = ["PLC0415"]                    
 "projects/dissect.target/src/dissect/target/helpers/magic/mimetypes/**" = ["E501"]
