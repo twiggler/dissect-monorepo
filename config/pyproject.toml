@@ -6,5 +6,12 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
 
+[dependency-groups]
+test = ["pytest>=8.4.0"]
+dev = ["ruff==0.13.1", "vermin>=1.6.0", "pytest>=8.4.0"]
+
 [tool.uv]
 python-downloads = "automatic"
+
+[tool.uv.workspace]
+members = ["projects/*"]

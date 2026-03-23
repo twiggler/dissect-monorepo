@@ -9,6 +9,29 @@
 # Python versions to try for `test-all` (space-separated)
 PY_VERSIONS := "3.10 3.11 3.12"
 
+# Run ruff check+format over all projects.
+# Pass fix="true" to auto-fix instead of reporting.
+ruff fix="false":
+    uv run --group dev ruff check {{ if fix == "true" { "--fix" } else { "" } }}
+    uv run --group dev ruff format {{ if fix == "true" { "" } else { "--check" } }}
+
+# Internal: run vermin minimum-version check over all projects.
+# `typing_extensions` is excluded because vermin reports it as requiring ~2/~3
+# (the module's own declared compatibility range), which is a false positive
+# unrelated to the actual code under analysis.
+# See: https://github.com/netromdk/vermin/issues/330
+vermin:
+    uv run --group dev vermin -t=3.10- --no-tips --lint --exclude typing_extensions projects
+
+# Check formatting and linting (ruff + vermin).
+lint:
+    just ruff
+    just vermin
+
+# Auto-fix ruff issues (vermin has no auto-fix).
+fix:
+    just ruff true
+
 # Run pytest for a single project using `uv` to create the environment.
 # --all-packages installs all workspace members as editable so sibling deps are importable.
 # --all-extras ensures optional dependencies (e.g. backports.zstd) are available.
