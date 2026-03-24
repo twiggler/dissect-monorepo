@@ -37,7 +37,9 @@ fix:
 test project env args="":
     #!/usr/bin/env bash
     set -uo pipefail
-    uv run --group dev --all-packages --all-extras --python {{env}} pytest projects/{{project}} {{args}} || exit_code=$?
+    uv run --group dev --all-packages --all-extras --python {{env}} \
+        pytest -n auto projects/{{project}} {{args}} \
+        || exit_code=$?
     # Exit code 5 means no tests were collected — not a failure.
     [ "${exit_code:-0}" -eq 5 ] || exit "${exit_code:-0}"
 
