@@ -6,9 +6,6 @@
 #   just test-affected origin/master 3.11
 
 
-# Python versions to try for `test-all` (space-separated)
-PY_VERSIONS := "3.10 3.11 3.12"
-
 # Run ruff check+format over all projects.
 # Pass fix="true" to auto-fix instead of reporting.
 ruff fix="false":
@@ -38,19 +35,23 @@ fix:
 # Example: just test dissect.xfs 3.11
 # Example: just test dissect.xfs 3.11 "-k test_foo"
 test project env args="":
-    uv run --group dev --all-packages --all-extras --python {{env}} pytest projects/{{project}} {{args}}
+    #!/usr/bin/env bash
+    set -uo pipefail
+    uv run --group dev --all-packages --all-extras --python {{env}} pytest projects/{{project}} {{args}} || exit_code=$?
+    # Exit code 5 means no tests were collected — not a failure.
+    [ "${exit_code:-0}" -eq 5 ] || exit "${exit_code:-0}"
 
-# Run pytest for every project and for each Python version in `PY_VERSIONS`.
+# Run pytest for every project using the given Python version.
 # Skips directories that don't have a pyproject.toml.
-test-all:
-    @for d in projects/*; do \
-        if [ -f "$d/pyproject.toml" ]; then \
-            project_name=$(basename "$d"); \
-            for py_version in {{PY_VERSIONS}}; do \
-                echo "--- Running tests for $project_name with Python $py_version ---"; \
-                just --justfile {{justfile()}} test $$project_name $$py_version; \
-            done; \
-        fi; \
+test-all env="3.10":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for d in projects/*; do
+        if [ -f "$d/pyproject.toml" ]; then
+            project_name=$(basename "$d")
+            echo "--- Running tests for $project_name with Python {{env}} ---"
+            just test "$project_name" {{env}}
+        fi
     done
 
 # Run tests only for packages affected by changes vs a base ref.
@@ -65,5 +66,5 @@ test-affected ref="origin/master" env="3.10":
     fi
     echo "Affected packages: $packages"
     for pkg in $packages; do
-        just --justfile {{justfile()}} test "$pkg" {{env}}
+        just test "$pkg" {{env}}
     done
