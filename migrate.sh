@@ -13,6 +13,7 @@ mkdir -p "projects"
 cp "$PYPROJECTS_FILE" "pyproject.toml"
 cp "$CONFIG_DIR/Justfile" "Justfile"
 cp -r "$CONFIG_DIR/.github" ".github"
+cp -r "$CONFIG_DIR/.monorepo" ".monorepo"
 
 # 1. Read and Process Repositories
 while IFS= read -r line || [[ -n "$line" ]]; do

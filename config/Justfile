@@ -56,12 +56,23 @@ test-all env="3.10":
         fi
     done
 
+# Run pytest for every project across all configured Python environments.
+# Reads python-versions from [tool.monorepo.test] in pyproject.toml.
+test-all-envs:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mapfile -t envs < <(uv run --python ">=3.11" --no-project --with packaging python .monorepo/matrix.py --format versions)
+    for env in "${envs[@]}"; do
+        echo "=== Testing with Python $env ==="
+        just test-all "$env"
+    done
+
 # Run tests only for packages affected by changes vs a base ref.
 # Example: just test-affected origin/master 3.11
 test-affected ref="origin/master" env="3.10":
     #!/usr/bin/env bash
     set -euo pipefail
-    packages=$(git diff --name-only {{ref}} | uv run python scripts/affected_tests.py)
+    packages=$(git diff --name-only {{ref}} | uv run --python ">=3.11" --no-project --with packaging python .monorepo/affected_tests.py)
     if [ -z "$packages" ]; then
         echo "No packages affected. Nothing to do."
         exit 0

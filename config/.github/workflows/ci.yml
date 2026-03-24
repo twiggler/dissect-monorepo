@@ -3,6 +3,10 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   PYTHON_VERSION: "3.14"
 
@@ -19,3 +23,55 @@ jobs:
       - uses: extractions/setup-just@v2
 
       - run: just lint
+
+  generate-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Generate matrix
+        id: set-matrix
+        run: uv run --python ">=3.11" --no-project --with packaging python .monorepo/matrix.py --format json >> $GITHUB_OUTPUT
+
+  test:
+    needs: generate-matrix
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.generate-matrix.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history needed so git diff can reach the base commit in test-affected.
+          fetch-depth: 0
+
+      - uses: ./.github/actions/lfs-pull
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+          python-version: ${{ matrix.python-version }}
+
+      - uses: extractions/setup-just@v2
+
+      - name: Compute base ref
+        id: base-ref
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          IS_NEW_REF: ${{ github.event.created }}
+        shell: bash
+        run: bash .monorepo/compute-base-ref.sh
+
+      - name: Run tests
+        env:
+          BASE_REF: ${{ steps.base-ref.outputs.ref }}
+          PY_VERSION: ${{ matrix.python-version }}
+        shell: bash
+        run: bash .monorepo/run-tests.sh
