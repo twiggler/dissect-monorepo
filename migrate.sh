@@ -3,17 +3,11 @@ set -e
 
 # Configuration
 SCRIPT_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
-CONFIG_DIR="$SCRIPT_DIR/config"
-PYPROJECTS_FILE="$CONFIG_DIR/pyproject.toml"
 PROJECTS_FILE="$SCRIPT_DIR/project-list"
 BASE_URL="git@github.com:fox-it"
 
 # Initialize Monorepo
-mkdir -p "projects"
-cp "$PYPROJECTS_FILE" "pyproject.toml"
-cp "$CONFIG_DIR/Justfile" "Justfile"
-cp -r "$CONFIG_DIR/.github" ".github"
-cp -r "$CONFIG_DIR/.monorepo" ".monorepo"
+bash "$SCRIPT_DIR/install_config.sh" "$(pwd)"
 
 # 1. Read and Process Repositories
 while IFS= read -r line || [[ -n "$line" ]]; do

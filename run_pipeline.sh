@@ -5,7 +5,6 @@ set -euo pipefail
 # Usage: ./run_pipeline.sh [TARGET_DIR]
 #   TARGET_DIR  Directory to (re)create the monorepo in.
 #               Defaults to a sibling directory named 'dissect-monorepo'.
-#               The directory is wiped and re-initialised as a fresh git repo.
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
 TARGET_DIR=$(realpath -m "${1:-$SCRIPT_DIR/../dissect-monorepo}")
@@ -28,7 +27,7 @@ run() {
   fi
 }
 
-# 1. migrate.sh (always use bash)
+# 1. migrate.sh — install config and clone/merge each project
 echo "Running migrate.sh"
 run bash "$SCRIPT_DIR/migrate.sh"
 
