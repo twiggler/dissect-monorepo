@@ -11,7 +11,7 @@ test = ["pytest>=8.4.0", "pytest-xdist>=3"]
 dev = ["ruff==0.13.1", "vermin>=1.6.0", "pytest>=8.4.0", "pytest-xdist>=3"]
 
 [tool.monorepo.test]
-python-versions = ["3.10", "3.11", "3.12"]
+python-versions = ["3.10", "3.11", "3.12", "3.13", "pypy3.11"]
 os = ["ubuntu-latest", "windows-latest"]
 
 [tool.uv]
