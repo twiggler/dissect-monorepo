@@ -6,6 +6,12 @@
 #   just test-affected origin/master 3.11
 
 
+# Update the version specifier for an internal dependency across all projects.
+# Only modifies projects that already declare the dependency.
+# Example: just set-constraint dissect.cstruct ">=4.7,<5"
+set-constraint package specifier:
+    uv run .monorepo/set_constraint.py '{{package}}' '{{specifier}}'
+
 # Run ruff check+format over all projects.
 # Pass fix="true" to auto-fix instead of reporting.
 ruff fix="false":
