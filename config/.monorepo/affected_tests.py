@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "packaging",
+# ]
+# ///
 """
 Given a list of changed file paths on stdin (one per line, e.g. from
 `git diff --name-only`), print the names of all workspace packages that are

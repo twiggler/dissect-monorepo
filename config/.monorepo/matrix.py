@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "packaging",
+# ]
+# ///
 """
 Print the test matrix defined in [tool.monorepo.test] of the root pyproject.toml.
 
