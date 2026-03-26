@@ -5,13 +5,14 @@ Given a list of changed file paths on stdin (one per line, e.g. from
 affected — i.e. directly changed or transitively depend on a changed package.
 
 Prints one package name per line to stdout.
+If a changed file matches a global-trigger pattern, ALL packages are printed.
 
 Usage:
     git diff --name-only origin/master | uv run --group dev python .monorepo/affected_tests.py
 """
 
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import tomllib
 from packaging.requirements import InvalidRequirement, Requirement
@@ -19,6 +20,25 @@ from packaging.utils import canonicalize_name
 
 WORKSPACE_ROOT = Path(__file__).parent.parent
 PROJECTS_DIR = WORKSPACE_ROOT / "projects"
+
+# Any changed file matching one of these patterns causes every package to be
+# tested.  Patterns are matched against repo-root-relative POSIX paths using
+# PurePosixPath.match(), which supports ** wildcards.
+GLOBAL_TRIGGER_PATTERNS: tuple[str, ...] = (
+    "pyproject.toml",       # root config / dependency constraints / test matrix
+    "uv.lock",              # resolved environment changed
+    "Justfile",             # test invocation changed
+    ".monorepo/**",         # test infrastructure scripts
+    ".github/workflows/**", # CI workflow definitions
+)
+
+
+def is_global_trigger(changed_files: list[str]) -> bool:
+    for line in changed_files:
+        p = PurePosixPath(line.strip())
+        if any(p.match(pattern) for pattern in GLOBAL_TRIGGER_PATTERNS):
+            return True
+    return False
 
 
 def load_workspace_packages() -> dict[str, tuple[str, Path]]:
@@ -95,6 +115,12 @@ def main() -> None:
     changed_files = sys.stdin.read().splitlines()
 
     workspace = load_workspace_packages()
+
+    if is_global_trigger(changed_files):
+        for _, (original_name, _) in sorted(workspace.items()):
+            print(original_name)
+        return
+
     reverse = build_reverse_graph(workspace)
 
     directly_changed = packages_from_changed_files(changed_files, workspace)
