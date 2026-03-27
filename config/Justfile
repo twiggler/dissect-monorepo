@@ -6,6 +6,11 @@
 #   just test-affected origin/master 3.11
 
 
+# List workspace packages whose current version has no release tag (i.e. not yet published).
+# Pass --names to get a bare newline-separated list of package names only.
+pending-releases *args:
+    bash .monorepo/pending_releases.sh {{args}}
+
 # Update the version specifier for an internal dependency across all projects.
 # Only modifies projects that already declare the dependency.
 # Example: just set-constraint dissect.cstruct ">=4.7,<5"
