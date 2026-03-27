@@ -8,6 +8,16 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 
+# Publish pending workspace packages to PyPI (or testpypi), then create and push git tags.
+# Specify individual package names or 'all'.
+# Pass '--index testpypi' to publish to TestPyPI instead.
+# Authentication: set UV_PUBLISH_TOKEN=<token> locally; CI uses OIDC Trusted Publishing.
+# Example: just release all
+# Example: just release dissect.util dissect.cstruct
+# Example: just release all --index testpypi
+release +args:
+    .monorepo/release.sh {{args}}
+
 # List workspace packages whose current version has no release tag (i.e. not yet published).
 # Pass --names to get a bare newline-separated list of package names only.
 pending-releases *args:
