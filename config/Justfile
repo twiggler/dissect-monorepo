@@ -17,6 +17,10 @@ pending-releases *args:
 set-constraint package specifier:
     uv run .monorepo/set_constraint.py '{{package}}' '{{specifier}}'
 
+# Regenerate the dissect meta-package dependency list from current workspace versions.
+update-meta:
+    uv run .monorepo/update_meta_deps.py
+
 # Run ruff check+format over all projects.
 # Pass fix="true" to auto-fix instead of reporting.
 ruff fix="false":
