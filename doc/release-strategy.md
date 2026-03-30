@@ -113,7 +113,74 @@ Leaving the field blank in the UI releases everything pending; filling it in res
 
 ---
 
+### Decision 4: GitHub Actions release workflow and authentication
+
+**Workflow**: `config/.github/workflows/release.yml` (applied to the monorepo via `install_config.sh`) exposes `just release` as a manually triggered GitHub Actions workflow. It accepts two inputs rendered as form fields in the GitHub UI:
+
+| Input | Default | Description |
+|---|---|---|
+| `packages` | `all` | Space-separated package names, or `all` for every pending package |
+| `index` | `pypi` | Target index: `pypi` or `testpypi` |
+
+A concurrency group (`group: release`, `cancel-in-progress: false`) ensures that at most one release workflow runs at a time and that an in-progress release is never cancelled by a concurrent trigger.
+
+The `index` input maps directly to a **GitHub environment** of the same name (`pypi` or `testpypi`). Environments serve two purposes here: they act as deployment gates (the `pypi` environment can be configured to require a manual review before proceeding) and they scope secrets — `UV_PUBLISH_TOKEN` is stored per-environment so that the testpypi token cannot accidentally be used to publish to pypi and vice versa.
+
+**Authentication strategy — dual-mode**
+
+The workflow supports two authentication modes and automatically selects between them at runtime:
+
+1. **Account-scoped API token** (primary): If a secret named `UV_PUBLISH_TOKEN` is stored in the active GitHub environment, `uv publish` uses it directly. A single account-scoped token covers all 31 packages, so one token per index (pypi, testpypi) is sufficient.
+
+2. **OIDC Trusted Publishing** (fallback): If no `UV_PUBLISH_TOKEN` secret is present in the environment, the workflow falls back to PyPI's [Trusted Publisher](https://docs.pypi.org/trusted-publishers/) mechanism. The workflow is granted the `id-token: write` permission, which allows it to obtain a short-lived, cryptographically verifiable OIDC token from GitHub that PyPI accepts in place of a long-lived credential.
+
+The guard that implements this:
+
+```yaml
+env:
+  UV_PUBLISH_TOKEN: ${{ secrets.UV_PUBLISH_TOKEN || '' }}
+run: |
+  if [[ -z "$UV_PUBLISH_TOKEN" ]]; then unset UV_PUBLISH_TOKEN; fi
+  just release $PACKAGES --index $INDEX
+```
+
+GitHub resolves an unset or empty secret to an empty string `""`. The explicit `unset` ensures that `uv` never receives an empty token — an empty string would cause an authentication error rather than triggering the OIDC fallback.
+
+**Why account-scoped tokens instead of per-package Trusted Publishers**
+
+PyPI Trusted Publisher setup requires clicking through a per-package form on pypi.org (one submission per package per index). With 31 packages and two indexes (pypi + testpypi) that is 62 one-time manual setup operations. PyPI provides no public API for this; it cannot be automated. An account-scoped API token is a single credential that covers all packages under the account, reducing the setup to one token per index regardless of how many packages exist.
+
+OIDC Trusted Publishing remains available as a zero-credential fallback: once a Trusted Publisher is configured for a given package (if ever), the workflow will automatically use it when no `UV_PUBLISH_TOKEN` secret is set in the environment.
+
+**Pending user actions — environment and secret setup**
+
+Create both GitHub environments and add secrets via the repository Settings → Environments UI, or via `gh api`:
+
+```bash
+# Create environments
+gh api repos/OWNER/REPO/environments/pypi -X PUT
+gh api repos/OWNER/REPO/environments/testpypi -X PUT
+```
+
+Then for each environment, add a `UV_PUBLISH_TOKEN` secret containing an account-scoped API token created at pypi.org / test.pypi.org → Account Settings → API tokens. Optionally add Required Reviewers to the `pypi` environment for a manual approval gate before production releases.
+
+---
+
 ### Remaining Work
+
+#### Done
+
+- **`release.sh`**: builds pending packages via `uv build`, publishes via `uv publish`, and pushes namespaced git tags. Package name validation (`^[a-zA-Z0-9._-]+$`) and safe directory cleanup (`find -mindepth 1 -delete`) are in place.
+- **`pending_releases.sh`**: offline tag-based check used by `release.sh` to enumerate pending packages.
+- **`just release` recipe**: exposes `release.sh` as a `just` recipe in `Justfile`.
+- **`[[tool.uv.index]]` entries**: `pypi` and `testpypi` index entries (including `publish-url`) are present in the root `pyproject.toml`.
+- **`release.yml` GitHub Actions workflow**: `workflow_dispatch` workflow with `packages` and `index` inputs, GitHub environment gating, and dual-auth (API token + OIDC fallback).
+
+#### Pending user actions
+
+- Create `pypi` and `testpypi` GitHub environments in repository Settings → Environments (see Decision 4).
+- Add `UV_PUBLISH_TOKEN` secret to each environment (account-scoped API token from pypi.org / test.pypi.org).
+- Optionally add Required Reviewers to the `pypi` environment for a manual approval gate.
 
 #### 1. `just bump-minor` and `just bump-patch` recipes
 

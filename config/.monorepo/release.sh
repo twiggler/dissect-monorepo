@@ -117,7 +117,7 @@ done
 echo "=== Publish phase (index: $index) ==="
 for pkg in "${to_release[@]}"; do
     echo "--- Publishing $pkg ---"
-    uv publish --index "$index" "${dist_dirs[$pkg]}"/*
+    uv publish --skip-existing --index "$index" "${dist_dirs[$pkg]}"/*
 done
 echo
 

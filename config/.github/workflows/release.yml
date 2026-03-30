@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: 'Package names (space-separated) or "all"'
+        required: true
+        default: all
+      index:
+        description: 'Package index to publish to'
+        required: true
+        default: pypi
+        type: choice
+        options:
+          - pypi
+          - testpypi
+
+# Only one release can run at a time; never cancel an in-progress release.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  id-token: write  # OIDC Trusted Publishing (used when UV_PUBLISH_TOKEN is not set)
+  contents: write  # push git tags
+
+env:
+  PYTHON_VERSION: "3.14"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Each index maps to a GitHub environment of the same name.
+    # Store a PyPI API token as UV_PUBLISH_TOKEN in each environment's secrets.
+    environment: ${{ inputs.index }}_release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history + all tags needed by pending_releases.sh.
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: extractions/setup-just@v2
+
+      - name: Release packages
+        env:
+          PACKAGES: ${{ inputs.packages }}
+          INDEX: ${{ inputs.index }}
+          # Set only when the secret exists; absent → uv falls back to OIDC Trusted Publishing.
+          UV_PUBLISH_TOKEN: ${{ secrets.UV_PUBLISH_TOKEN || '' }}
+        run: |
+          if [[ -z "$UV_PUBLISH_TOKEN" ]]; then unset UV_PUBLISH_TOKEN; fi
+          just release $PACKAGES --index $INDEX
