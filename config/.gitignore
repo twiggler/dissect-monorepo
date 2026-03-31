@@ -1,0 +1,6 @@
+# In-place compiled Rust extensions (built by 'just build-native-inplace').
+# These are build artefacts — never commit them.
+projects/**/_native.cpython-*.so
+
+# Cargo build cache for native projects.
+projects/**/_native.src/target/

@@ -118,3 +118,22 @@ test-affected ref="origin/master" env="3.10":
     for pkg in $packages; do
         just test "$pkg" {{env}}
     done
+
+# Compile the Rust extension in-place for a single native project.
+# The .so lands in src/..., directly visible to the uv editable install.
+# Pass env to pin the Python version so the .so ABI matches the test run.
+# Requires: cargo/rustup installed locally.
+# Example: just build-native-inplace dissect.util 3.12
+build-native-inplace project env="3.10":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd projects/{{project}}
+    uv run --python {{env}} --with setuptools-rust python -c "from setuptools import setup; setup()" build_ext --inplace
+
+# Compile the Rust extension in-place and run pytest with --force-native.
+# Fails (not skips) if the compiled extension cannot be imported.
+# Example: just test-native dissect.util 3.12
+# Example: just test-native dissect.util 3.12 "-k test_lz4"
+test-native project env args="":
+    just build-native-inplace {{project}} {{env}}
+    just test {{project}} {{env}} "--force-native {{args}}"

@@ -32,6 +32,18 @@ Project-specific fixes:
 - dissect.fve: adds an `argon2` optional extra with `argon2-cffi` so that
   the Argon2 password-hashing fallback works without building the native
   Rust extension.  This mirrors the `argon2-cffi` entry that was in tox.ini.
+
+5. [[tool.setuptools-rust.ext-modules]] path — For projects with a Rust
+   extension, the Cargo.toml path is relative to the project root.  In a
+   src/ layout the correct value is e.g.
+   "src/dissect/util/_native.src/Cargo.toml" rather than
+   "dissect/util/_native.src/Cargo.toml".  The old path is derived from
+   the project name; the correct one is the actual location on disk.
+
+6. [tool.monorepo] native — Projects that declare a Rust extension via
+   [[tool.setuptools-rust.ext-modules]] are marked with
+   `[tool.monorepo] native = true` so that the build-native-inplace Just
+   recipe and native_projects.py discovery script can find them.
 """
 
 import tomlkit
@@ -58,6 +70,8 @@ def patch_pyproject(file_path: Path) -> None:
     changed |= _fix_packages_find_where(doc, project_root)
     changed |= _fix_pytest_ini_options(doc, project_root)
     changed |= _fix_fve_argon2_extra(doc, project_root)
+    changed |= _fix_setuptools_rust_cargo_path(doc, project_root)
+    changed |= _fix_monorepo_native_flag(doc)
 
     if changed:
         with open(file_path, "w", encoding="utf-8") as f:
@@ -191,6 +205,65 @@ def _fix_fve_argon2_extra(doc: tomlkit.TOMLDocument, project_root: Path) -> bool
     argon2_array.append("argon2-cffi")
     doc["project"]["optional-dependencies"]["argon2"] = argon2_array
     print("  [~] fve: added argon2 optional extra with argon2-cffi")
+    return True
+
+
+def _fix_setuptools_rust_cargo_path(doc: tomlkit.TOMLDocument, project_root: Path) -> bool:
+    """Fix [[tool.setuptools-rust.ext-modules]] path for src/ layout.
+
+    The path is relative to the project root.  After the src-layout migration the
+    Cargo.toml lives under src/, but the old path omits the src/ prefix.
+    We locate the Cargo.toml on disk and use its actual relative path.
+    """
+    ext_modules = doc.get("tool", {}).get("setuptools-rust", {}).get("ext-modules")
+    if not ext_modules:
+        print("  [-] setuptools-rust.ext-modules: not present, skipping.")
+        return False
+
+    changed = False
+    for entry in ext_modules:
+        old_path = entry.get("path")
+        if not old_path:
+            continue
+
+        # Find the actual Cargo.toml on disk
+        actual = project_root / old_path
+        if actual.exists():
+            print(f"  [✓] setuptools-rust path already correct: {old_path}")
+            continue
+
+        # Try the src/-prefixed variant
+        cargo_name = Path(old_path).name
+        candidates = list(project_root.rglob(cargo_name))
+        if not candidates:
+            print(f"  [!] setuptools-rust path: cannot find {cargo_name} under {project_root}, skipping.")
+            continue
+
+        new_path = str(candidates[0].relative_to(project_root))
+        print(f"  [~] setuptools-rust path: {old_path!r} → {new_path!r}")
+        entry["path"] = new_path
+        changed = True
+
+    return changed
+
+
+def _fix_monorepo_native_flag(doc: tomlkit.TOMLDocument) -> bool:
+    """Add [tool.monorepo] native = true for projects with a Rust extension."""
+    ext_modules = doc.get("tool", {}).get("setuptools-rust", {}).get("ext-modules")
+    if not ext_modules:
+        return False
+
+    monorepo = doc.get("tool", {}).get("monorepo", {})
+    if monorepo.get("native"):
+        print("  [✓] tool.monorepo.native already set.")
+        return False
+
+    if "tool" not in doc:
+        doc.add("tool", tomlkit.table())
+    if "monorepo" not in doc["tool"]:
+        doc["tool"].add("monorepo", tomlkit.table())
+    doc["tool"]["monorepo"]["native"] = True
+    print("  [~] tool.monorepo: native = true added")
     return True
 
 
