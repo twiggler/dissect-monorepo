@@ -32,6 +32,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: false
 
       - name: Generate matrix
         id: set-matrix
@@ -69,9 +71,22 @@ jobs:
         shell: bash
         run: bash .monorepo/compute-base-ref.sh
 
+      - name: Install Rust (native in-place builds)
+        if: ${{ matrix.variant == 'native' }}
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Run tests
+        if: ${{ matrix.variant == 'source' }}
         env:
           BASE_REF: ${{ steps.base-ref.outputs.ref }}
           PY_VERSION: ${{ matrix.python-version }}
         shell: bash
         run: bash .monorepo/run-tests.sh
+
+      - name: Run native in-place tests
+        if: ${{ matrix.variant == 'native' }}
+        env:
+          BASE_REF: ${{ steps.base-ref.outputs.ref }}
+          PY_VERSION: ${{ matrix.python-version }}
+        shell: bash
+        run: bash .monorepo/run-native-tests.sh

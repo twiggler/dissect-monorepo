@@ -78,7 +78,7 @@ echo
 for pkg in "${to_release[@]}"; do
     if [[ "$pkg" == "dissect" ]]; then
         echo "--- Updating dissect meta-package dependency pins ---"
-        uv run .monorepo/update_meta_deps.py
+        uv run --python ">=3.12" .monorepo/update_meta_deps.py
         echo
         break
     fi

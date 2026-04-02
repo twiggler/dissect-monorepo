@@ -47,6 +47,7 @@ def main() -> None:
         payload = {
             "python-version": matrix["python-versions"],
             "os": matrix["os"],
+            "variant": ["source", "native"],
         }
         print(f"matrix={json.dumps(payload)}")
     else:

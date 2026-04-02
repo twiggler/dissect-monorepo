@@ -27,7 +27,7 @@ pending-releases *args:
 # Only modifies projects that already declare the dependency.
 # Example: just set-constraint dissect.cstruct ">=4.7,<5"
 set-constraint package specifier:
-    uv run .monorepo/set_constraint.py '{{package}}' '{{specifier}}'
+    uv run --python ">=3.12" .monorepo/set_constraint.py '{{package}}' '{{specifier}}'
 
 # Bump the minor version of one or more workspace packages.
 # Specify individual package names, or 'all' to bump every workspace member.
@@ -41,7 +41,7 @@ bump +packages:
 
 # Regenerate the dissect meta-package dependency list from current workspace versions.
 update-meta:
-    uv run .monorepo/update_meta_deps.py
+    uv run --python ">=3.12" .monorepo/update_meta_deps.py
 
 # Run ruff check+format over all projects.
 # Pass fix="true" to auto-fix instead of reporting.
@@ -82,14 +82,15 @@ test project env args="":
 
 # Run pytest for every project using the given Python version.
 # Skips directories that don't have a pyproject.toml.
-test-all env="3.10":
+# Pass extra pytest args via 'args', e.g.: just test-all 3.10 "-k test_foo"
+test-all env="3.10" args="":
     #!/usr/bin/env bash
     set -euo pipefail
     for d in projects/*; do
         if [ -f "$d/pyproject.toml" ]; then
             project_name=$(basename "$d")
             echo "--- Running tests for $project_name with Python {{env}} ---"
-            just test "$project_name" {{env}}
+            just test "$project_name" {{env}} {{args}}
         fi
     done
 
@@ -98,7 +99,7 @@ test-all env="3.10":
 test-all-envs:
     #!/usr/bin/env bash
     set -euo pipefail
-    mapfile -t envs < <(uv run .monorepo/matrix.py --format versions)
+    mapfile -t envs < <(uv run --python ">=3.12" .monorepo/matrix.py --format versions)
     for env in "${envs[@]}"; do
         echo "=== Testing with Python $env ==="
         just test-all "$env"
@@ -109,7 +110,7 @@ test-all-envs:
 test-affected ref="origin/master" env="3.10":
     #!/usr/bin/env bash
     set -euo pipefail
-    packages=$(git diff --name-only {{ref}} | uv run .monorepo/affected_tests.py)
+    packages=$(git diff --name-only {{ref}} | uv run --python ">=3.12" .monorepo/affected_tests.py)
     if [ -z "$packages" ]; then
         echo "No packages affected. Nothing to do."
         exit 0
@@ -130,10 +131,44 @@ build-native-inplace project env="3.10":
     cd projects/{{project}}
     uv run --python {{env}} --with setuptools-rust python -c "from setuptools import setup; setup()" build_ext --inplace
 
-# Compile the Rust extension in-place and run pytest with --force-native.
+# Compile the Rust extensions in-place for all native projects.
+# Example: just build-all-native-inplace 3.12
+build-all-native-inplace env="3.10":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mapfile -t native_projects < <(uv run --python ">=3.12" .monorepo/native_projects.py)
+    if [[ ${#native_projects[@]} -eq 0 ]]; then
+        echo "No native projects found."
+        exit 0
+    fi
+    for pkg in "${native_projects[@]}"; do
+        echo "--- Building native extension for $pkg with Python {{env}} ---"
+        just build-native-inplace "$pkg" {{env}}
+    done
+
+# Compile the Rust extension in-place and run pytest with DISSECT_FORCE_NATIVE set.
 # Fails (not skips) if the compiled extension cannot be imported.
 # Example: just test-native dissect.util 3.12
 # Example: just test-native dissect.util 3.12 "-k test_lz4"
 test-native project env args="":
     just build-native-inplace {{project}} {{env}}
-    just test {{project}} {{env}} "--force-native {{args}}"
+    DISSECT_FORCE_NATIVE=1 just test {{project}} {{env}} {{args}}
+
+# Build all native extensions in-place, then run the full test suite across every project.
+# DISSECT_FORCE_NATIVE causes native projects to fail (not skip) if the .so is unavailable.
+# Example: just test-native-all 3.10
+test-native-all env="3.10":
+    just build-all-native-inplace {{env}}
+    DISSECT_FORCE_NATIVE=1 just test-all {{env}}
+
+# Build all native extensions in-place, then run tests for affected packages only.
+# All extensions are always built (not just affected ones) so that non-affected native
+# packages are available as compiled dependencies for the packages under test.
+# Trade-off: O(all native) builds vs. O(affected native) — acceptable while the number
+# of native projects stays small and each has a pure-Python fallback.
+# DISSECT_FORCE_NATIVE causes native projects to fail (not skip) if the .so is unavailable.
+# Example: just test-native-affected origin/master 3.10
+test-native-affected ref="origin/master" env="3.10":
+    just build-all-native-inplace {{env}}
+    DISSECT_FORCE_NATIVE=1 just test-affected {{ref}} {{env}}
+

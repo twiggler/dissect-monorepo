@@ -40,4 +40,4 @@ if [[ ${#double_bumps[@]} -gt 0 ]]; then
     exit 1
 fi
 
-uv run .monorepo/bump_version.py "${targets[@]}"
+uv run --python ">=3.12" .monorepo/bump_version.py "${targets[@]}"
