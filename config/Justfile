@@ -9,6 +9,8 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 
 # Publish pending workspace packages to PyPI (or testpypi), then create and push git tags.
+# Pure-Python packages only — native (Rust) packages are released via the
+# release-native.yml GitHub Actions workflow.
 # Specify individual package names or 'all'.
 # Pass '--index testpypi' to publish to TestPyPI instead.
 # Authentication: set UV_PUBLISH_TOKEN=<token> locally; CI uses OIDC Trusted Publishing.
@@ -16,7 +18,14 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 # Example: just release dissect.util dissect.cstruct
 # Example: just release all --index testpypi
 release +args:
-    .monorepo/release.sh {{args}}
+    .monorepo/release_pure.sh {{args}}
+
+# Remove all built wheels and sdists from the dist/ directory.
+clean:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [[ -L dist ]] && { echo "error: dist is a symlink, refusing to remove" >&2; exit 1; }
+    rm -rf "$PWD/dist"
 
 # List workspace packages whose current version has no release tag (i.e. not yet published).
 # Pass --names to get a bare newline-separated list of package names only.
@@ -172,3 +181,61 @@ test-native-affected ref="origin/master" env="3.10":
     just build-all-native-inplace {{env}}
     DISSECT_FORCE_NATIVE=1 just test-affected {{ref}} {{env}}
 
+# Build native wheels (abi3 + free-threaded) for a single package via cibuildwheel.
+# Runs abi3audit on the produced abi3 wheels to verify stable-ABI compliance.
+# Python versions are taken from [tool.monorepo.test] python-versions.
+# archs: value for CIBW_ARCHS — "auto" means host arch only; space-separated list enables
+#        additional targets (caller must configure QEMU first for non-native arches).
+# Requires Docker for Linux builds.
+# Example: just build-native-wheels dissect.util
+# Example: just build-native-wheels dissect.util "x86_64 i686 aarch64"
+build-native-wheels pkg archs="auto":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out="dist/{{pkg}}"
+    mkdir -p "$out"
+    # Derive CIBW_BUILD identifiers from configured python-versions.
+    # 3.11 -> cp311-*   pypy3.11 -> pp311-*
+    mapfile -t versions < <(uv run --python ">=3.12" .monorepo/matrix.py --format versions)
+    build_ids=()
+    for v in "${versions[@]}"; do
+        if [[ "$v" == pypy* ]]; then
+            numeric="${v#pypy}"; numeric="${numeric//./}"
+            build_ids+=("pp${numeric}-*")
+        else
+            build_ids+=("cp${v//./}-*")
+        fi
+    done
+    # Append cp3??t-* so free-threaded wheels are built in the same pass as abi3/PyPy.
+    # The config difference (no --py-limited-api) is expressed via
+    # [[tool.cibuildwheel.overrides]] in pyproject.toml — no per-pass env overrides needed.
+    cibw_build="${build_ids[*]} cp3??t-*"
+    echo "--- Building abi3 + free-threaded wheels for {{pkg}} (archs: {{archs}}) ---"
+    CIBW_BUILD="$cibw_build" CIBW_ARCHS="{{archs}}" \
+        uv tool run --from "cibuildwheel==3.3.0" cibuildwheel \
+            --config-file pyproject.toml \
+            --output-dir "$out" \
+            "projects/{{pkg}}"
+    # --- abi3audit (verify stable-ABI compliance of abi3 wheels) ---
+    mapfile -t abi3_wheels < <(ls "$out"/*-abi3-*.whl 2>/dev/null || true)
+    if [[ ${#abi3_wheels[@]} -gt 0 ]]; then
+        echo "--- Running abi3audit for {{pkg}} ---"
+        uv tool run abi3audit --strict --report "${abi3_wheels[@]}"
+    fi
+
+# Build and test native wheels for all native projects.
+# archs: "auto" for host arch only (suitable for PRs); space-separated list for
+#        multi-arch builds (caller must configure QEMU first for non-native arches).
+# Example: just test-native-wheels                          # host arch only (PR mode)
+# Example: just test-native-wheels "x86_64 i686 aarch64"   # multi-arch (nightly/release)
+test-native-wheels archs="auto":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mapfile -t native_projects < <(uv run --python ">=3.12" .monorepo/native_projects.py)
+    if [[ ${#native_projects[@]} -eq 0 ]]; then
+        echo "No native projects found."
+        exit 0
+    fi
+    for pkg in "${native_projects[@]}"; do
+        just build-native-wheels "$pkg" "{{archs}}"
+    done

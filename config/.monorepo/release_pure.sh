@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
-# release.sh — build, publish, and tag pending workspace packages.
+# release_pure.sh — build, publish, and tag pending workspace packages.
+#
+# Builds an sdist (and for pure-Python packages, a wheel) via `uv build`, publishes via
+# `uv publish --skip-existing`, then pushes namespaced git tags.
+#
+# For native (Rust) packages the binary wheels are expected to already be on PyPI,
+# uploaded by the per-platform runners in release-native.yml. This script only adds
+# the sdist alongside them; --skip-existing means it won't re-upload wheels.
 #
 # Usage:
-#   .monorepo/release.sh <package> [<package> ...] [--index <name>]
-#   .monorepo/release.sh all [--index <name>]
+#   .monorepo/release_pure.sh <package> [<package> ...] [--index <name>]
+#   .monorepo/release_pure.sh all [--index <name>]
 #
 # --index defaults to "pypi". Use "--index testpypi" for TestPyPI.
 #
@@ -96,6 +103,7 @@ for pkg in "${to_release[@]}"; do
     find "$out" -mindepth 1 -delete
     echo "--- Building $pkg ---"
     uv build --package "$pkg" --out-dir "$out"
+
     dist_dirs["$pkg"]="$out"
 done
 echo

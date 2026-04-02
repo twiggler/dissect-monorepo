@@ -4,3 +4,6 @@ projects/**/_native.cpython-*.so
 
 # Cargo build cache for native projects.
 projects/**/_native.src/target/
+
+# Built wheels and sdists (release_pure.sh / test-native-wheels output).
+dist/
