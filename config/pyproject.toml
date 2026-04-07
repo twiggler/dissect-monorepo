@@ -14,6 +14,13 @@ dev = ["ruff==0.13.1", "vermin>=1.6.0", "pytest>=8.4.0", "pytest-xdist>=3"]
 python-versions = ["3.10", "3.11", "3.12", "3.13", "pypy3.11"]
 os = ["ubuntu-latest", "windows-latest"]
 
+[tool.monorepo.native]
+# Arch lists for the Linux x86_64 cibuildwheel runner.
+# linux-x86-archs-pr  — fast subset (host-only, no QEMU) for push/PR builds.
+# linux-x86-archs     — full set (+ QEMU-emulated arches) for nightly/release builds.
+linux-x86-archs-pr = ["x86_64"]
+linux-x86-archs = ["x86_64", "i686", "ppc64le", "s390x", "armv7l"]
+
 # ---------------------------------------------------------------------------
 # cibuildwheel — shared config for all native (Rust) projects.
 # Run with: cibuildwheel --config-file pyproject.toml projects/<pkg>
@@ -40,7 +47,7 @@ environment = {PATH = "$HOME/.cargo/bin:$PATH"}
 
 [tool.cibuildwheel.macos]
 before-all = "curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable"
-environment = {PATH = "$HOME/.cargo/bin:$PATH"}
+environment = {PATH = "$HOME/.cargo/bin:$PATH", MACOSX_DEPLOYMENT_TARGET = "10.12"}
 
 [tool.cibuildwheel.windows]
 before-all = "rustup target add i686-pc-windows-msvc"  # only needed for x86; no-op otherwise

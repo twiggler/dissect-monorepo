@@ -1,0 +1,100 @@
+# Release workflow for native (Rust) packages.
+#
+# Triggered automatically when `just release` pushes a version tag for a native package.
+# Builds binary wheels on all platforms and publishes them to PyPI alongside the sdist
+# that `just release` already uploaded.
+#
+# Two triggers:
+#   push: tags  — automatic, one run per tag; parallel runs for simultaneous releases
+#                 are fine given the small number of native packages.
+#   workflow_dispatch — manual bulk fallback (e.g. after `just release all` to catch any
+#                       tag-triggered runs that may have been skipped by GitHub's queue).
+#
+# Authentication: PyPI Trusted Publishing (OIDC) — no tokens needed.
+# Configure a publisher for each native package at https://pypi.org/manage/account/publishing/
+
+name: Release native wheels
+
+on:
+  push:
+    # Matches tags of the form <package>/<version>, e.g. dissect.util/3.5.0
+    tags: ["**/[0-9]*"]
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: "Space-separated package names (or 'all'). Use as bulk fallback after 'just release all'."
+        type: string
+        required: true
+      index:
+        description: "Target PyPI index"
+        type: choice
+        options: [pypi, testpypi]
+        default: pypi
+
+jobs:
+  # Derive the package name and target index from the trigger.
+  # For tag triggers: extract from github.ref_name (e.g. "dissect.util/3.5.0" → "dissect.util").
+  # For workflow_dispatch: use the inputs directly.
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.resolve.outputs.packages }}
+      index: ${{ steps.resolve.outputs.index }}
+      is-native: ${{ steps.resolve.outputs.is-native }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Resolve packages and index
+        id: resolve
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_PACKAGES: ${{ inputs.packages }}
+          INPUT_INDEX: ${{ inputs.index }}
+        run: .monorepo/prepare_native_release.sh
+
+  # Build wheels on all platforms and upload them as artifacts.
+  build-wheels:
+    name: Build wheels
+    needs: prepare
+    if: needs.prepare.outputs.is-native == 'true'
+    uses: ./.github/workflows/build-native-wheels.yml
+    with:
+      packages: ${{ needs.prepare.outputs.packages }}
+      include-slow-arches: true
+      upload-artifacts: true
+
+  # Collect all platform artifacts and publish to PyPI in one place.
+  publish:
+    name: Publish to ${{ needs.prepare.outputs.index }}
+    needs: [prepare, build-wheels]
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ needs.prepare.outputs.index }}_release
+      url: ${{ needs.prepare.outputs.index == 'pypi' && 'https://pypi.org' || 'https://test.pypi.org' }}
+    permissions:
+      id-token: write   # OIDC Trusted Publishing
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download wheels
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          path: dist/
+          merge-multiple: true
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Publish
+        env:
+          # Set only when the secret exists; absent → uv falls back to OIDC Trusted Publishing.
+          UV_PUBLISH_TOKEN: ${{ secrets.UV_PUBLISH_TOKEN || '' }}
+        shell: bash
+        run: |
+          if [[ -z "$UV_PUBLISH_TOKEN" ]]; then unset UV_PUBLISH_TOKEN; fi
+          uv publish --index "${{ needs.prepare.outputs.index }}" dist/**/*.whl

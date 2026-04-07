@@ -166,60 +166,95 @@ Then for each environment, add a `UV_PUBLISH_TOKEN` secret containing an account
 
 ---
 
-### Remaining Work
 
-#### Done
+---
 
-- **`release.sh`**: builds pending packages via `uv build`, publishes via `uv publish`, and pushes namespaced git tags. Package name validation (`^[a-zA-Z0-9._-]+$`) and safe directory cleanup (`find -mindepth 1 -delete`) are in place.
-- **`pending_releases.sh`**: offline tag-based check used by `release.sh` to enumerate pending packages.
-- **`just release` recipe**: exposes `release.sh` as a `just` recipe in `Justfile`.
-- **`[[tool.uv.index]]` entries**: `pypi` and `testpypi` index entries (including `publish-url`) are present in the root `pyproject.toml`.
-- **`release.yml` GitHub Actions workflow**: `workflow_dispatch` workflow with `packages` and `index` inputs, GitHub environment gating, and dual-auth (API token + OIDC fallback).
+### Decision 5: Native (Rust) wheel publishing
 
-#### Pending user actions
+**Scope**: A small subset of dissect packages (currently `dissect.util` and `dissect.fve`) contain a Rust extension that must be compiled into a platform-specific binary wheel for each supported OS / architecture combination. Pure-Python packages are unaffected — they are published as described in Decision 4.
+
+**What marks a package as native**: `native = true` under `[tool.monorepo]` in the project's `pyproject.toml`. The `.monorepo/native_projects.py` script enumerates all such packages.
+
+---
+
+#### Relationship to pure-Python release
+
+Native packages follow the **same version management rules** as pure-Python packages (Decision 1–3) and go through the same `just release` path (Decision 4). The difference is in what happens *after* `just release`:
+
+1. `just release` publishes the **sdist** of each pending package to PyPI and creates a namespaced tag (e.g. `dissect.util/3.24.1`).
+2. Pushing that tag **automatically triggers** `release-native.yml` via the `push: tags` trigger.
+3. That workflow builds binary wheels on all supported platforms and publishes them to PyPI alongside the sdist.
+
+In other words, no developer action is needed beyond the usual `just release` — the native wheel pipeline kicks in automatically.
+
+---
+
+#### Trigger: tag push vs. `workflow_dispatch`
+
+`release-native.yml` has two triggers:
+
+| Trigger | Use case |
+|---|---|
+| `push: tags` matching `**/[0-9]*` | Automatic — fires once per `<package>/<version>` tag pushed by `just release` |
+| `workflow_dispatch` | Manual fallback — e.g. if a tag-triggered run failed and needs to be retried, or when releasing a subset of native packages on demand |
+
+The `workflow_dispatch` form accepts:
+- **`packages`** — space-separated package names or `all`
+- **`index`** — `pypi` (default) or `testpypi`
+
+---
+
+#### Three-job pipeline
+
+```
+prepare  →  build-wheels  →  publish
+```
+
+**`prepare`** (ubuntu-latest):
+- Driven by `.monorepo/prepare_native_release.sh`
+- For tag triggers: extracts the package name from `github.ref_name` (e.g. `dissect.util/3.24.1` → `dissect.util`) and derives the target index from the tag namespace
+- For `workflow_dispatch`: uses the form inputs directly; expands `all` by calling `native_projects.py`
+- Emits three outputs: `packages`, `index`, `is-native`
+- The `build-wheels` and `publish` jobs are skipped entirely when `is-native == 'false'` (i.e. a non-native package tag matched the pattern)
+
+**`build-wheels`** (calls `build-native-wheels.yml`):
+- Runs a 5-runner matrix in parallel: `ubuntu-latest` (Linux x86), `ubuntu-24.04-arm` (Linux aarch64), `macos-13` (macOS x86_64), `macos-latest` (macOS arm64), `windows-latest` (Windows AMD64 + x86)
+- Called with `include-slow-arches: true` — on the Linux x86 runner this enables QEMU-emulated builds for `i686`, `ppc64le`, `s390x`, and `armv7l` in addition to the native `x86_64`; the full arch list is read from `[tool.monorepo.native]` in `pyproject.toml`
+- Each runner uploads its wheels as a separate artifact (`wheels-linux-x86`, `wheels-linux-aarch64`, etc.)
+- `include-slow-arches: false` is used in CI (push/PR) for fast feedback — only the native host arch is built
+
+**`publish`** (ubuntu-latest):
+- Downloads all platform wheel artifacts and publishes them in a single `uv publish` call
+- Scoped to the GitHub environment resolved by `prepare` (`pypi` or `testpypi`) — inherits the same approval gates and secrets as the pure-Python release
+- Authentication follows the same dual-mode strategy as Decision 4: `UV_PUBLISH_TOKEN` secret when present, OIDC Trusted Publishing otherwise
+
+---
+
+#### Arch configuration
+
+The set of Linux x86 architectures to build is **not hardcoded in the workflow** — it lives in `[tool.monorepo.native]` inside the root `pyproject.toml`:
+
+```toml
+[tool.monorepo.native]
+linux-x86-archs-pr = ["x86_64"]                          # CI / PR builds (fast, no QEMU)
+linux-x86-archs    = ["x86_64", "i686", "ppc64le", "s390x", "armv7l"]  # release builds
+```
+
+The `.monorepo/resolve_linux_archs.py` script reads these lists, derives the corresponding `docker/setup-qemu-action` platform string automatically, and emits GitHub Actions outputs. Adding or removing an architecture only requires editing `pyproject.toml`.
+
+---
+
+#### Pending setup for native packages
+
+- **PyPI Trusted Publishers** (recommended): configure a Trusted Publisher for each native package on pypi.org under Account → Publishing. Without this, `UV_PUBLISH_TOKEN` must be set in the `pypi` / `testpypi` GitHub environments (already required for pure-Python packages — the same token covers native packages too).
+
+
+### Pending user actions
 
 - Create `pypi` and `testpypi` GitHub environments in repository Settings → Environments (see Decision 4).
 - Add `UV_PUBLISH_TOKEN` secret to each environment (account-scoped API token from pypi.org / test.pypi.org).
 - Optionally add Required Reviewers to the `pypi` environment for a manual approval gate.
 
-#### 1. `just bump-minor` and `just bump-patch` recipes
-
-Two recipes that accept an optional list of package names and increment the `version` field in each matching `projects/*/pyproject.toml`. `bump-minor` increments the minor component and resets patch to `0` (e.g. `3.24.1 → 3.25.0`); `bump-patch` increments only the patch component (e.g. `3.24.0 → 3.24.1`). When no packages are specified, all workspace members are bumped.
-
-```
-just bump-minor dissect.util dissect.cstruct
-just bump-patch dissect.util
-just bump-minor
-```
-
-Before making any changes, both recipes call the **pending-releases check** (the same logic used by `just release`) to verify that the current local version of each target package has a corresponding release tag. If no such tag exists, that version has never been released and the recipe aborts — enforcing the double-bump guard locally and offline. After editing `pyproject.toml` files, both recipes run `uv lock` to keep the workspace lockfile up to date.
-
-#### 2. `dissect` meta-package
-
-The bare `dissect` package (no suffix) does not currently exist in the monorepo.
-
-#### 3. `pending-releases.py` script
-
-A script (to be placed in `.monorepo/`) that:
-
-1. Reads all workspace members from the root `pyproject.toml`
-2. For each member, reads the local `version` from its `pyproject.toml`
-3. Checks whether a git tag `<name>/<version>` exists
-4. Reports packages where no such tag exists as pending
-
-This check is fully offline and side-effect-free. It is used by both `just release` (to enumerate what to publish) and `just bump-minor`/`just bump-patch` (as the double-bump guard), so the logic lives in one place.
-
-#### 4. `just set-constraint` recipe
-
-A recipe that accepts a package name and a new version specifier, then updates every `projects/*/pyproject.toml` that already declares a dependency on that package — across `[project.dependencies]` and all `[project.optional-dependencies]` groups. It uses `tomlkit` for lossless round-tripping (preserving comments, formatting, and ordering).
-
-```
-just set-constraint dissect.cstruct ">=4.7,<5"
-```
-
-Only projects that already list the dependency are modified; the recipe will not add new dependencies.
-
----
 
 ### Known Risk: Ghost Dependencies and the Workspace Masking Problem
 

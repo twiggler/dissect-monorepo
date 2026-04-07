@@ -18,8 +18,11 @@ Usage:
 
 import argparse
 import json
+import sys
 import tomllib
 from pathlib import Path
+
+sys.stdout.reconfigure(newline="\n")
 
 WORKSPACE_ROOT = Path(__file__).parent.parent
 

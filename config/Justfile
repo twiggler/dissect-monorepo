@@ -226,16 +226,34 @@ build-native-wheels pkg archs="auto":
 # Build and test native wheels for all native projects.
 # archs: "auto" for host arch only (suitable for PRs); space-separated list for
 #        multi-arch builds (caller must configure QEMU first for non-native arches).
-# Example: just test-native-wheels                          # host arch only (PR mode)
-# Example: just test-native-wheels "x86_64 i686 aarch64"   # multi-arch (nightly/release)
-test-native-wheels archs="auto":
+# Example: just test-native-wheels                               # host arch only, all native packages
+# Example: just test-native-wheels "x86_64 i686 aarch64"          # multi-arch (nightly/release)
+# Example: just test-native-wheels auto "dissect.util dissect.fve" # specific packages only
+test-native-wheels archs="auto" packages="all":
     #!/usr/bin/env bash
     set -euo pipefail
-    mapfile -t native_projects < <(uv run --python ">=3.12" .monorepo/native_projects.py)
-    if [[ ${#native_projects[@]} -eq 0 ]]; then
+    mapfile -t all_native < <(uv run --python ">=3.12" .monorepo/native_projects.py)
+    if [[ ${#all_native[@]} -eq 0 ]]; then
         echo "No native projects found."
         exit 0
     fi
-    for pkg in "${native_projects[@]}"; do
+    if [[ "{{packages}}" == "all" ]]; then
+        to_build=("${all_native[@]}")
+    else
+        read -ra requested <<< "{{packages}}"
+        to_build=()
+        for pkg in "${requested[@]}"; do
+            if printf '%s\n' "${all_native[@]}" | grep -qxF "$pkg"; then
+                to_build+=("$pkg")
+            else
+                echo "[skip] $pkg is not a native project" >&2
+            fi
+        done
+    fi
+    if [[ ${#to_build[@]} -eq 0 ]]; then
+        echo "No native projects to build."
+        exit 0
+    fi
+    for pkg in "${to_build[@]}"; do
         just build-native-wheels "$pkg" "{{archs}}"
     done

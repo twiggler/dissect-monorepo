@@ -4,8 +4,11 @@
 # ///
 """Print the names of workspace projects that have [tool.monorepo] native = true."""
 
+import sys
 import tomllib
 from pathlib import Path
+
+sys.stdout.reconfigure(newline="\n")
 
 for p in sorted(Path("projects").glob("*/pyproject.toml")):
     data = tomllib.loads(p.read_text())

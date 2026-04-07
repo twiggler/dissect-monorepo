@@ -1,0 +1,99 @@
+# Reusable workflow — build native (Rust) wheels via cibuildwheel across all platforms.
+#
+# Callers control two knobs:
+#   include-slow-arches — when true, builds QEMU-emulated arches (i686, ppc64le, s390x,
+#                         armv7l) in addition to x86_64. The full arch list is read from
+#                         [tool.monorepo.native] in pyproject.toml. Use false for fast
+#                         push/PR builds (host-only, no QEMU).
+#   upload-artifacts    — upload built wheels as GitHub Actions artifacts so a
+#                         subsequent publish job can collect and upload them to PyPI.
+#
+# The build matrix is generated dynamically: each Linux x86 arch gets its own runner
+# so that QEMU-emulated builds run in parallel rather than sequentially.
+
+
+on:
+  workflow_call:
+    inputs:
+      include-slow-arches:
+        description: >
+          Build QEMU-emulated Linux x86 arches (i686, ppc64le, s390x, armv7l) in
+          addition to the native x86_64. Uses [tool.monorepo.native.linux-x86-archs]
+          from pyproject.toml when true, linux-x86-archs-pr when false.
+        type: boolean
+        default: false
+      packages:
+        description: "Space-separated package names to build, or 'all' to build every native package."
+        type: string
+        default: all
+      upload-artifacts:
+        description: "Upload built wheels as GitHub Actions artifacts for a subsequent publish job."
+        type: boolean
+        default: false
+
+jobs:
+  # Generate the build matrix. Linux x86 arches are split one-per-runner (parallel QEMU).
+  # All other platforms are static entries appended by the script.
+  generate-matrix:
+    name: Generate matrix
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate build matrix
+        id: gen
+        run: |
+          slow_flag=${{ inputs.include-slow-arches && '--slow' || '' }}
+          python3 .monorepo/resolve_linux_archs.py $slow_flag
+
+  build:
+    name: Build / ${{ matrix.platform }}
+    needs: generate-matrix
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.generate-matrix.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/lfs-pull
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - uses: extractions/setup-just@v2
+
+      - name: Set up QEMU
+        if: matrix.needs-qemu == 'true'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: ${{ matrix.qemu-platform }}
+
+      - name: Install bash 5 (macOS)
+        if: runner.os == 'macOS'
+        run: brew install bash
+
+      - name: Build native wheels
+        env:
+          PACKAGES: ${{ inputs.packages }}
+        shell: bash
+        run: just test-native-wheels "${{ matrix.archs }}" "$PACKAGES"
+
+      - name: Upload wheels
+        if: inputs.upload-artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.platform }}
+          path: dist/
+          if-no-files-found: error

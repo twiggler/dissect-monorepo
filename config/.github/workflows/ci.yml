@@ -2,6 +2,15 @@ name: CI
 on:
   push:
   pull_request:
+  schedule:
+    # Nightly at 02:00 UTC — runs full multi-arch native wheel build with QEMU.
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      full-native:
+        description: "Run full multi-arch native wheel build (with QEMU)"
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -90,3 +99,20 @@ jobs:
           PY_VERSION: ${{ matrix.python-version }}
         shell: bash
         run: bash .monorepo/run-native-tests.sh
+
+  test-native:
+    # All non-QEMU platforms on every push/PR: Linux x86_64, Linux aarch64,
+    # macOS x86_64, macOS arm64, Windows. No emulation needed.
+    name: Test native wheels
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    uses: ./.github/workflows/build-native-wheels.yml
+    with:
+      include-slow-arches: false
+
+  test-native-full:
+    # All platforms + QEMU arches (i686, ppc64le, s390x, armv7l) — nightly or manual.
+    name: Test native wheels (full)
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full-native)
+    uses: ./.github/workflows/build-native-wheels.yml
+    with:
+      include-slow-arches: true
