@@ -124,6 +124,23 @@ Leaving the field blank in the UI releases everything pending; filling it in res
 
 A concurrency group (`group: release`, `cancel-in-progress: false`) ensures that at most one release workflow runs at a time and that an in-progress release is never cancelled by a concurrent trigger.
 
+**GitHub App token — why it is required**
+
+After successfully publishing a package, `release.yml` pushes a namespaced git tag (e.g. `dissect.util/3.24.1`) to `master`. That tag push is what triggers `release-native.yml` to build and publish binary wheels automatically.
+
+GitHub intentionally suppresses workflow triggers when a push is made with the built-in `GITHUB_TOKEN`: a tag pushed by `GITHUB_TOKEN` will *not* fire any `push: tags`-triggered workflow. This guard exists to prevent accidental infinite loops, but it also means the native wheel pipeline would never start automatically.
+
+The workaround is a **GitHub App installation token**. Pushes authenticated with an app token are attributed to the app (a non-workflow actor), so GitHub treats them like a real user push and fires downstream workflows normally. The workflow mints a fresh, short-lived installation token at the start of each run via `actions/create-github-app-token`, using two repository-level secrets:
+
+| Secret | Contents |
+|---|---|
+| `RELEASE_APP_ID` | The numeric ID of the GitHub App (found on its settings page) |
+| `RELEASE_APP_PRIVATE_KEY` | The PEM-encoded private key generated for the app |
+
+These are **repository-level** secrets (not environment secrets) because they are needed before the workflow selects an environment.
+
+Setup: create a GitHub App (it can be scoped to a single repository), install it on the monorepo, grant it **Contents: Read & Write** permission, generate a private key, then store the app ID and private key as repository secrets named `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`.
+
 The `index` input maps directly to a **GitHub environment** of the same name (`pypi` or `testpypi`). Environments serve two purposes here: they act as deployment gates (the `pypi` environment can be configured to require a manual review before proceeding) and they scope secrets — `UV_PUBLISH_TOKEN` is stored per-environment so that the testpypi token cannot accidentally be used to publish to pypi and vice versa.
 
 **Authentication strategy — dual-mode**
@@ -134,17 +151,6 @@ The workflow supports two authentication modes and automatically selects between
 
 2. **OIDC Trusted Publishing** (fallback): If no `UV_PUBLISH_TOKEN` secret is present in the environment, the workflow falls back to PyPI's [Trusted Publisher](https://docs.pypi.org/trusted-publishers/) mechanism. The workflow is granted the `id-token: write` permission, which allows it to obtain a short-lived, cryptographically verifiable OIDC token from GitHub that PyPI accepts in place of a long-lived credential.
 
-The guard that implements this:
-
-```yaml
-env:
-  UV_PUBLISH_TOKEN: ${{ secrets.UV_PUBLISH_TOKEN || '' }}
-run: |
-  if [[ -z "$UV_PUBLISH_TOKEN" ]]; then unset UV_PUBLISH_TOKEN; fi
-  just release $PACKAGES --index $INDEX
-```
-
-GitHub resolves an unset or empty secret to an empty string `""`. The explicit `unset` ensures that `uv` never receives an empty token — an empty string would cause an authentication error rather than triggering the OIDC fallback.
 
 **Why account-scoped tokens instead of per-package Trusted Publishers**
 
@@ -164,7 +170,18 @@ gh api repos/OWNER/REPO/environments/testpypi -X PUT
 
 Then for each environment, add a `UV_PUBLISH_TOKEN` secret containing an account-scoped API token created at pypi.org / test.pypi.org → Account Settings → API tokens. Optionally add Required Reviewers to the `pypi` environment for a manual approval gate before production releases.
 
----
+Additionally, create a GitHub App and add its credentials as **repository-level** secrets (Settings → Secrets and variables → Actions):
+
+1. Go to GitHub → Settings → Developer settings → GitHub Apps → New GitHub App.
+2. Scope it to the monorepo only, grant **Repository permissions: Contents = Read & Write**, and disable everything else.
+3. After creation, note the **App ID** shown on the app's settings page.
+4. Generate a private key (bottom of the app settings page) and download the `.pem` file.
+5. Install the app on the monorepo repository.
+6. Add two repository secrets:
+   - `RELEASE_APP_ID` — the numeric App ID
+   - `RELEASE_APP_PRIVATE_KEY` — the full contents of the downloaded `.pem` file
+
+Without these secrets, tags pushed by `release.yml` will not trigger `release-native.yml` (see Authentication strategy above for the full explanation).
 
 
 ---
@@ -187,6 +204,10 @@ Native packages follow the **same version management rules** as pure-Python pack
 
 In other words, no developer action is needed beyond the usual `just release` — the native wheel pipeline kicks in automatically.
 
+This two-step sequence is possible because PyPI treats a release (a version number) as a container that can receive additional distribution files after the initial upload. Publishing the sdist first does not close or lock the release; `release-native.yml` can add binary wheels to the same version later without any special API access or re-release mechanics.
+
+**Publication window**: there is a brief period between the end of step 1 and the end of step 3 during which the package is live on PyPI but only the sdist is available. A user who installs the package in that window will receive the sdist and pip will attempt to build it from source, requiring a Rust toolchain. This is the same experience any user on an unsupported platform would have, and it is generally harmless. The window is short — `release-native.yml` is triggered immediately by the tag push and builds in parallel across platforms — but it is not zero.
+
 ---
 
 #### Trigger: tag push vs. `workflow_dispatch`
@@ -204,29 +225,29 @@ The `workflow_dispatch` form accepts:
 
 ---
 
-#### Three-job pipeline
+#### GitHub App token — why it is required
 
-```
-prepare  →  build-wheels  →  publish
-```
+GitHub Actions' `GITHUB_TOKEN` has a deliberate restriction: events fired by workflows that use `GITHUB_TOKEN` do **not** trigger subsequent workflow runs. This is an anti-loop safeguard built into GitHub Actions. In practice, if `release.yml` pushed the `dissect.util/3.24.1` tag using `GITHUB_TOKEN`, the `push: tags` trigger on `release-native.yml` would be **silently skipped** — no error, no warning, nothing.
 
-**`prepare`** (ubuntu-latest):
-- Driven by `.monorepo/prepare_native_release.sh`
-- For tag triggers: extracts the package name from `github.ref_name` (e.g. `dissect.util/3.24.1` → `dissect.util`) and derives the target index from the tag namespace
-- For `workflow_dispatch`: uses the form inputs directly; expands `all` by calling `native_projects.py`
-- Emits three outputs: `packages`, `index`, `is-native`
-- The `build-wheels` and `publish` jobs are skipped entirely when `is-native == 'false'` (i.e. a non-native package tag matched the pattern)
+A **GitHub App token** bypasses this restriction. A tag pushed with an App-minted token is treated by GitHub as a normal user push, so `push: tags` fires as expected.
 
-**`build-wheels`** (calls `build-native-wheels.yml`):
-- Runs a 5-runner matrix in parallel: `ubuntu-latest` (Linux x86), `ubuntu-24.04-arm` (Linux aarch64), `macos-13` (macOS x86_64), `macos-latest` (macOS arm64), `windows-latest` (Windows AMD64 + x86)
-- Called with `include-slow-arches: true` — on the Linux x86 runner this enables QEMU-emulated builds for `i686`, `ppc64le`, `s390x`, and `armv7l` in addition to the native `x86_64`; the full arch list is read from `[tool.monorepo.native]` in `pyproject.toml`
-- Each runner uploads its wheels as a separate artifact (`wheels-linux-x86`, `wheels-linux-aarch64`, etc.)
-- `include-slow-arches: false` is used in CI (push/PR) for fast feedback — only the native host arch is built
+**How `release.yml` uses it**: before checking out the repository, the workflow calls [`actions/create-github-app-token`](https://github.com/actions/create-github-app-token) to mint a short-lived (1-hour) installation token. `actions/checkout` is then passed that token, so every subsequent git operation in the job — including the tag push performed by `just release` — is authenticated as the GitHub App rather than as `GITHUB_TOKEN`.
 
-**`publish`** (ubuntu-latest):
-- Downloads all platform wheel artifacts and publishes them in a single `uv publish` call
-- Scoped to the GitHub environment resolved by `prepare` (`pypi` or `testpypi`) — inherits the same approval gates and secrets as the pure-Python release
-- Authentication follows the same dual-mode strategy as Decision 4: `UV_PUBLISH_TOKEN` secret when present, OIDC Trusted Publishing otherwise
+**Required secrets** (stored at repository level, not inside a GitHub environment):
+
+| Secret | Value |
+|---|---|
+| `RELEASE_APP_ID` | The numeric App ID shown on the GitHub App's Settings page |
+| `RELEASE_APP_PRIVATE_KEY` | The full PEM contents of a private key generated for the App |
+
+**Minimal permissions for the GitHub App**:
+
+| Permission | Level |
+|---|---|
+| Contents | Read & write (to push tags) |
+| Metadata | Read-only (automatic) |
+
+No other permissions are required. No repository installation scope is needed beyond the single repository that runs `release.yml`.
 
 ---
 
@@ -251,9 +272,11 @@ The `.monorepo/resolve_linux_archs.py` script reads these lists, derives the cor
 
 ### Pending user actions
 
+- **GitHub App** (required for native wheel automation): create a GitHub App with **Contents: Read & write** permission, install it on the repository, then add two repository-level secrets: `RELEASE_APP_ID` (numeric App ID) and `RELEASE_APP_PRIVATE_KEY` (PEM private key). Without these, the `push: tags` trigger on `release-native.yml` will not fire when `release.yml` pushes a tag. See Decision 5 — *GitHub App token* for details.
 - Create `pypi` and `testpypi` GitHub environments in repository Settings → Environments (see Decision 4).
 - Add `UV_PUBLISH_TOKEN` secret to each environment (account-scoped API token from pypi.org / test.pypi.org).
 - Optionally add Required Reviewers to the `pypi` environment for a manual approval gate.
+- Create a GitHub App and add `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY` as repository-level secrets (see Decision 4 — Authentication strategy).
 
 
 ### Known Risk: Ghost Dependencies and the Workspace Masking Problem
