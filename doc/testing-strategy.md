@@ -50,6 +50,8 @@ The base ref is passed to `just test-affected` (or `just test-native-affected`).
 
 **Practical impact**: a PR that touches only `dissect.cstruct` runs tests for `dissect.cstruct` *plus* every package that imports it — `dissect.etl`, `dissect.executable`, and any other transitive dependents. A change to `dissect.util`, which sits near the root of the dependency graph, will trigger tests for a large fraction of the workspace. A change to a leaf package with no dependents (e.g. `dissect.thumbcache`) runs only that package's tests.
 
+**Known limitation — affected testing assumes a green base**: the PR diff is computed against `base.sha` (the tip of the target branch). If a package was already failing on master *before* the PR was opened, it will not appear in the diff and its tests will not run. A clean PR build therefore means "this PR introduced no new failures", not "the entire codebase is healthy". This is an accepted trade-off, widely used in large monorepos (Nx, Turborepo, Bazel/Buck, Google TAP all work the same way). The correctness invariant holds only when master is green; a failing nightly run should therefore be treated as a blocker and resolved before further PRs are merged. The nightly `test-native-full` job (which runs `test-all`) is the authoritative signal that the full codebase is healthy.
+
 ---
 
 ### Decision 2: Two complementary test modes for native packages
