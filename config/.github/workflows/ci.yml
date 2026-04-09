@@ -29,7 +29,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@v4
 
       - run: just lint
 
@@ -68,7 +68,7 @@ jobs:
           cache-dependency-glob: "uv.lock"
           python-version: ${{ matrix.python-version }}
 
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@v4
 
       - name: Compute base ref
         id: base-ref

@@ -72,7 +72,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@v4
 
       - name: Set up QEMU
         if: matrix.needs-qemu == 'true'

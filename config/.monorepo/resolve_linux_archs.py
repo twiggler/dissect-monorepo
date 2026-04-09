@@ -28,42 +28,14 @@ QEMU_MAP = {
 }
 
 # Non-Linux-x86 runners are always included regardless of the --slow flag.
+# None of these require QEMU — needs-qemu is derived centrally from qemu-platform presence.
 STATIC_ENTRIES = [
-    {
-        "runner": "ubuntu-24.04-arm",
-        "platform": "linux-aarch64",
-        "archs": "aarch64",
-        "needs-qemu": "false",
-        "qemu-platform": "",
-    },
-    {
-        "runner": "macos-latest",
-        "platform": "macos-arm64",
-        "archs": "arm64",
-        "needs-qemu": "false",
-        "qemu-platform": "",
-    },
-    {
-        "runner": "macos-15-intel",
-        "platform": "macos-x86_64",
-        "archs": "x86_64",
-        "needs-qemu": "false",
-        "qemu-platform": "",
-    },
-    {
-        "runner": "windows-latest",
-        "platform": "windows-amd64",
-        "archs": "AMD64",
-        "needs-qemu": "false",
-        "qemu-platform": "",
-    },
-    {
-        "runner": "windows-latest",
-        "platform": "windows-x86",
-        "archs": "x86",
-        "needs-qemu": "false",
-        "qemu-platform": "",
-    },
+    {"runner": "ubuntu-24.04-arm", "platform": "linux-aarch64",  "archs": "aarch64"},
+    {"runner": "macos-latest",     "platform": "macos-arm64",    "archs": "arm64"},
+    {"runner": "macos-15-intel",   "platform": "macos-x86_64",   "archs": "x86_64"},
+    {"runner": "windows-latest",   "platform": "windows-amd64",  "archs": "AMD64"},
+    {"runner": "windows-latest",   "platform": "windows-x86",    "archs": "x86"},
+    {"runner": "windows-11-arm",   "platform": "windows-arm64",  "archs": "ARM64"},
 ]
 
 
@@ -80,18 +52,22 @@ def main() -> None:
     archs = native[key]
 
     # One runner entry per Linux x86 arch so QEMU-emulated builds are parallel.
+    linux_entries = []
     linux_entries = [
         {
             "runner": "ubuntu-latest",
             "platform": f"linux-{arch}",
             "archs": arch,
-            "needs-qemu": "true" if arch in QEMU_MAP else "false",
-            "qemu-platform": QEMU_MAP.get(arch, ""),
+            **({"qemu-platform": qemu_platform} if (qemu_platform := QEMU_MAP.get(arch)) else {}),
         }
         for arch in archs
     ]
 
-    matrix = linux_entries + STATIC_ENTRIES
+    # Derive needs-qemu from the presence of qemu-platform so it never gets out of sync.
+    matrix = [
+        {**e, "needs-qemu": "true" if "qemu-platform" in e else "false"}
+        for e in linux_entries + STATIC_ENTRIES
+    ]
     matrix_json = json.dumps(matrix)
 
     github_output = os.environ.get("GITHUB_OUTPUT")
