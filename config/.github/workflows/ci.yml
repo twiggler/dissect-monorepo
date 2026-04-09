@@ -1,6 +1,8 @@
 name: CI
 on:
   push:
+    branches:
+      - master
   pull_request:
   schedule:
     # Nightly at 02:00 UTC — runs full multi-arch native wheel build with QEMU.
