@@ -2,91 +2,87 @@
 # dependencies = ["tomlkit"]
 # ///
 
+"""Remove per-project dev/test tooling that is now owned by the monorepo root.
+
+For each sub-project pyproject.toml:
+
+  [dependency-groups]:
+    - The 'test' group, if present and non-empty, is preserved and renamed to
+      'dev'. It typically contains package-specific test dependencies (e.g.
+      pexpect, docutils) that are not part of the workspace-wide tooling.
+      include-group references are dropped since the groups they point to are
+      being removed.
+    - All other groups (lint, build, debug, dev, ...) are removed. These only
+      ever contained tooling now centralised in the root [dependency-groups].
+    - If the 'test' group is absent or empty the entire [dependency-groups]
+      table is removed.
+
+  [project.optional-dependencies]:
+    - The 'dev' extra is removed. It duplicated what is now in the root and has
+      no meaning inside the monorepo.
+    - All other extras (full, yara, test, ...) are preserved — they are part of
+      the package's published PyPI metadata.
+
+The root pyproject.toml is not modified by this script; its [dependency-groups]
+are maintained directly.
+"""
+
 import tomlkit
 from pathlib import Path
 
-# --- CONFIGURATION ---
-TARGET_DEPS = {
-    "ruff": "0.13.1",
-    "pytest": "8.0.0",
-}
 PROJECTS_DIR = Path("projects")
-ROOT_TOML = Path("pyproject.toml")
-# ---------------------
 
-def filter_dependencies(dep_list):
-    """Safely removes target dependencies from a tomlkit Array or list."""
-    to_remove = []
-    for i, dep in enumerate(dep_list):
-        # We handle both strings and complex objects (though dev deps are usually strings)
-        dep_str = str(dep)
-        if any(dep_str.startswith(t) for t in TARGET_DEPS):
-            to_remove.append(i)
-    
-    # Remove from back to front to keep indices valid
-    for index in reversed(to_remove):
-        dep_list.pop(index)
-    
-    return len(to_remove) > 0
 
-def clean_subproject(file_path):
-    """Removes target dependencies from a single sub-project."""
+def clean_subproject(file_path: Path) -> None:
     with open(file_path, "r", encoding="utf-8") as f:
         doc = tomlkit.parse(f.read())
 
     modified = False
-    
-    # 1. Check [project.optional-dependencies]
-    opt_deps = doc.get("project", {}).get("optional-dependencies", {})
-    for group in opt_deps.values():
-        if filter_dependencies(group):
-            modified = True
 
-    # 2. Check [dependency-groups] (The newer standard)
-    dep_groups = doc.get("dependency-groups", {})
-    for group in dep_groups.values():
-        if filter_dependencies(group):
-            modified = True
+    # --- [dependency-groups] ---
+    if "dependency-groups" in doc:
+        dep_groups = doc["dependency-groups"]
+
+        # Collect entries from the 'test' group, dropping include-group refs.
+        test_entries = [
+            e for e in dep_groups.get("test", [])
+            if isinstance(e, str)
+        ]
+
+        del doc["dependency-groups"]
+        modified = True
+
+        if test_entries:
+            # Rename 'test' → 'dev' and keep only the real package-specific entries.
+            new_groups = tomlkit.table()
+            arr = tomlkit.array()
+            arr.multiline(True)
+            for entry in test_entries:
+                arr.append(entry)
+            new_groups["dev"] = arr
+            doc["dependency-groups"] = new_groups
+
+    # --- [project.optional-dependencies.dev] ---
+    opt_deps = doc.get("project", {}).get("optional-dependencies", {})
+    if "dev" in opt_deps:
+        del opt_deps["dev"]
+        modified = True
+        if not opt_deps:
+            del doc["project"]["optional-dependencies"]
 
     if modified:
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(tomlkit.dumps(doc))
         print(f"  [✓] Cleaned {file_path.parent.name}")
+    else:
+        print(f"  [-] No changes needed for {file_path.parent.name}")
 
-def update_root():
-    """Adds the target dependencies to the root pyproject.toml."""
-    if not ROOT_TOML.exists():
-        print("Error: Root pyproject.toml not found.")
-        return
-
-    with open(ROOT_TOML, "r", encoding="utf-8") as f:
-        doc = tomlkit.parse(f.read())
-
-    if "dependency-groups" not in doc:
-        doc["dependency-groups"] = tomlkit.table()
-    
-    if "dev" not in doc["dependency-groups"]:
-        doc["dependency-groups"]["dev"] = tomlkit.array()
-
-    dev_group = doc["dependency-groups"]["dev"]
-    
-    for name, version in TARGET_DEPS.items():
-        spec = f"{name}=={version}"
-        # Only add if it's not already there
-        if not any(str(d).startswith(name) for d in dev_group):
-            dev_group.append(spec)
-            print(f"  [+] Added {spec} to root dev group")
-
-    with open(ROOT_TOML, "w", encoding="utf-8") as f:
-        f.write(tomlkit.dumps(doc))
 
 def main():
-    print("Updating root pyproject.toml...")
-    update_root()
-
-    print("\nCleaning sub-projects...")
-    for toml_path in PROJECTS_DIR.rglob("pyproject.toml"):
+    print("Cleaning sub-projects...")
+    for toml_path in sorted(PROJECTS_DIR.rglob("pyproject.toml")):
         clean_subproject(toml_path)
+
 
 if __name__ == "__main__":
     main()
