@@ -78,6 +78,8 @@ fix:
 # Run pytest for a single project using `uv` to create the environment.
 # --all-packages installs all workspace members as editable so sibling deps are importable.
 # --all-extras ensures optional dependencies (e.g. backports.zstd) are available.
+# -n auto (pytest-xdist): distributes tests across one worker process per CPU core.
+#   Tests run concurrently; order is non-deterministic; each worker is a fresh subprocess.
 # Example: just test dissect.xfs 3.11
 # Example: just test dissect.xfs 3.11 "-k test_foo"
 test project env args="":
