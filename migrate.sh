@@ -34,8 +34,10 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     # Rewrite history into the projects/ folder
     # Also move a top-level `dissect/` directory (if present) into `src/dissect/`
     # so the monorepo layout becomes: projects/<repo>/src/dissect/...
+    # tox.ini is excluded: it is superseded by `just` recipes in the monorepo.
     git filter-repo --to-subdirectory-filter "projects/$REPO_PATH" \
-        --path-rename "projects/$REPO_PATH/dissect/:projects/$REPO_PATH/src/dissect/"
+        --path-rename "projects/$REPO_PATH/dissect/:projects/$REPO_PATH/src/dissect/" \
+        --invert-paths --path "tox.ini"
     
     popd > /dev/null
 

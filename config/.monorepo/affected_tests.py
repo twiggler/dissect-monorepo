@@ -84,7 +84,7 @@ def build_reverse_graph(workspace: dict[str, tuple[str, Path]]) -> dict[str, set
                 dep_name = canonicalize_name(Requirement(raw).name)
             except InvalidRequirement:
                 continue
-            if dep_name in workspace and dep_name != name:
+            if dep_name in workspace and dep_name != name:  # skip self-deps to avoid cycles
                 reverse[dep_name].add(name)
 
     return reverse

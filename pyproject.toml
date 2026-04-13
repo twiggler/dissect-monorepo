@@ -1,0 +1,17 @@
+[project]
+name = "dissect-monorepo-scripts"
+version = "0.1.0"
+description = "Scripts for managing the dissect monorepo: versioning, releases, CI matrix generation, and affected-test selection."
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "packaging>=24",
+    "tomlkit>=0.13",
+    "pytest>=8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["config/.monorepo"]
