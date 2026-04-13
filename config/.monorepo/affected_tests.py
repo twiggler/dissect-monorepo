@@ -24,8 +24,7 @@ import tomllib
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
 
-WORKSPACE_ROOT = Path(__file__).parent.parent
-PROJECTS_DIR = WORKSPACE_ROOT / "projects"
+PROJECTS_DIR = Path("projects")
 
 # Any changed file matching one of these patterns causes every package to be
 # tested.  Patterns are matched against repo-root-relative POSIX paths using
@@ -106,7 +105,7 @@ def transitive_dependents(changed: set[str], reverse: dict[str, set[str]]) -> se
 def packages_from_changed_files(lines: list[str], workspace: dict[str, tuple[str, Path]]) -> set[str]:
     changed: set[str] = set()
     for line in lines:
-        path = WORKSPACE_ROOT / line.strip()
+        path = Path(line.strip())
         for name, (_, pkg_dir) in workspace.items():
             try:
                 path.relative_to(pkg_dir)
@@ -118,6 +117,13 @@ def packages_from_changed_files(lines: list[str], workspace: dict[str, tuple[str
 
 
 def main() -> None:
+    if not PROJECTS_DIR.is_dir():
+        print(
+            "Error: must be run from the monorepo root ('projects/' directory not found)",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     changed_files = sys.stdin.read().splitlines()
 
     workspace = load_workspace_packages()

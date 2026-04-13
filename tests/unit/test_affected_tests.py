@@ -1,5 +1,7 @@
 """Unit tests for affected_tests.py — pure graph logic."""
 
+from pathlib import Path
+
 import affected_tests as af
 
 
@@ -152,8 +154,8 @@ def test_build_reverse_graph_no_self_loop(tmp_path):
 def test_packages_from_changed_files_match(tmp_path, monkeypatch):
     pkg_dir = tmp_path / "projects" / "pkg-a"
     pkg_dir.mkdir(parents=True)
-    workspace = {"pkg-a": ("pkg-a", pkg_dir)}
-    monkeypatch.setattr(af, "WORKSPACE_ROOT", tmp_path)
+    monkeypatch.chdir(tmp_path)
+    workspace = {"pkg-a": ("pkg-a", Path("projects") / "pkg-a")}
     result = af.packages_from_changed_files(["projects/pkg-a/module.py"], workspace)
     assert result == {"pkg-a"}
 
@@ -161,8 +163,8 @@ def test_packages_from_changed_files_match(tmp_path, monkeypatch):
 def test_packages_from_changed_files_unrelated(tmp_path, monkeypatch):
     pkg_dir = tmp_path / "projects" / "pkg-a"
     pkg_dir.mkdir(parents=True)
-    workspace = {"pkg-a": ("pkg-a", pkg_dir)}
-    monkeypatch.setattr(af, "WORKSPACE_ROOT", tmp_path)
+    monkeypatch.chdir(tmp_path)
+    workspace = {"pkg-a": ("pkg-a", Path("projects") / "pkg-a")}
     result = af.packages_from_changed_files(["unrelated/file.py"], workspace)
     assert result == set()
 
@@ -170,11 +172,11 @@ def test_packages_from_changed_files_unrelated(tmp_path, monkeypatch):
 def test_packages_from_changed_files_multiple(tmp_path, monkeypatch):
     (tmp_path / "projects" / "pkg-a").mkdir(parents=True)
     (tmp_path / "projects" / "pkg-b").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
     workspace = {
-        "pkg-a": ("pkg-a", tmp_path / "projects" / "pkg-a"),
-        "pkg-b": ("pkg-b", tmp_path / "projects" / "pkg-b"),
+        "pkg-a": ("pkg-a", Path("projects") / "pkg-a"),
+        "pkg-b": ("pkg-b", Path("projects") / "pkg-b"),
     }
-    monkeypatch.setattr(af, "WORKSPACE_ROOT", tmp_path)
     result = af.packages_from_changed_files([
         "projects/pkg-a/a.py",
         "projects/pkg-b/b.py",
