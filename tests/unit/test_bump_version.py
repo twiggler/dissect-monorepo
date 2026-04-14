@@ -12,7 +12,7 @@ def test_bump_minor_three_components_at_zero():
 
 
 def test_bump_minor_two_components():
-    assert bv._bump_minor("3.5") == "3.6"
+    assert bv._bump_minor("3.5") == "3.6.0"
 
 
 def test_bump_minor_major_zero():

@@ -1,0 +1,33 @@
+name: Integration tests
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install git-filter-repo
+        run: uv tool install git-filter-repo
+
+      - name: Configure git identity
+        run: |
+          git config --global user.email "ci@github-actions"
+          git config --global user.name "GitHub Actions"
+
+      - name: Run integration tests
+        run: uv run --group dev pytest tests/integration -v

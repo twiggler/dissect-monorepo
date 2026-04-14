@@ -40,11 +40,9 @@ def _read_workspace_packages() -> dict[str, tuple[Path, str, str]]:
 
 
 def _bump_minor(version: str) -> str:
+    # Always emit a 3-part version (major.minor.0), normalizing inputs like "3.4".
     v = Version(version)
-    components = version.split(".")
-    if len(components) >= 3:
-        return f"{v.major}.{v.minor + 1}.0"
-    return f"{v.major}.{v.minor + 1}"
+    return f"{v.major}.{v.minor + 1}.0"
 
 
 def main() -> None:

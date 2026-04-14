@@ -78,7 +78,6 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BEFORE_SHA: ${{ github.event.before }}
-          IS_NEW_REF: ${{ github.event.created }}
         shell: bash
         run: bash .monorepo/compute-base-ref.sh
 

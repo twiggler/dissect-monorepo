@@ -4,7 +4,7 @@ set -e
 # Configuration
 SCRIPT_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
 PROJECTS_FILE="$SCRIPT_DIR/project-list"
-BASE_URL="git@github.com:fox-it"
+BASE_URL="https://github.com/fox-it"
 
 # Initialize Monorepo
 bash "$SCRIPT_DIR/install_config.sh" "$(pwd)"
@@ -26,7 +26,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     rm -rf "$TEMP_CLONE"
 
     # Clone the individual repo
-    git clone "$BASE_URL/$REPO_PATH.git" "$TEMP_CLONE"
+    git clone "$BASE_URL/$REPO_PATH" "$TEMP_CLONE"
     
     pushd "$TEMP_CLONE" > /dev/null
     git lfs fetch --all origin
