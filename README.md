@@ -63,6 +63,7 @@ uv run --group dev pytest tests/integration -v
 
 ## Documentation
 
+- [doc/recipes.md](doc/recipes.md) — Justfile recipe reference and user guide
 - [doc/folder-layout.md](doc/folder-layout.md) — monorepo directory structure
 - [doc/tooling.md](doc/tooling.md) — tooling choices and rationale
 - [doc/release-strategy.md](doc/release-strategy.md) — release workflow
