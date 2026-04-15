@@ -47,5 +47,12 @@ def monorepo(monorepo_source, tmp_path):
         check=True,
         capture_output=True,
     )
+    # Start each test with a clean tag state so tests that set up specific tags
+    # don't depend on the fixture source having none.
+    tags = subprocess.run(
+        ["git", "tag", "-l"], cwd=dest, capture_output=True, text=True, check=True
+    ).stdout.splitlines()
+    for tag in tags:
+        subprocess.run(["git", "tag", "-d", tag], cwd=dest, check=True, capture_output=True)
     yield dest
     shutil.rmtree(dest, ignore_errors=True)

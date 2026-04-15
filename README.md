@@ -45,6 +45,22 @@ Defaults to `../dissect-monorepo` if no target is given.
 uv run --group dev pytest tests/unit
 ```
 
+### Run the integration tests locally
+
+Point `MONOREPO_FIXTURE` at an already-built monorepo to skip the ~3-minute
+`run_pipeline.sh` build step:
+
+```sh
+MONOREPO_FIXTURE=/tmp/dissect-monorepo-test uv run --group dev pytest tests/integration -v
+```
+
+Omit the variable to have pytest build a fresh monorepo automatically (slow, but
+mirrors what CI does):
+
+```sh
+uv run --group dev pytest tests/integration -v
+```
+
 ## Documentation
 
 - [doc/folder-layout.md](doc/folder-layout.md) — monorepo directory structure

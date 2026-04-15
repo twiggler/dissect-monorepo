@@ -21,6 +21,8 @@ jobs:
         with:
           python-version: "3.12"
 
+      - uses: extractions/setup-just@v4
+
       - name: Install git-filter-repo
         run: uv tool install git-filter-repo
 
