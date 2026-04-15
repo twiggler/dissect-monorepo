@@ -212,36 +212,20 @@ build-native-wheels pkg archs="auto":
         uv tool run abi3audit --strict --report "${abi3_wheels[@]}"
     fi
 
-# Build and test native wheels for all native projects.
+# Build native wheels for all native projects, or a caller-specified subset.
 # archs: "auto" for host arch only (suitable for PRs); space-separated list for
 #        multi-arch builds (caller must configure QEMU first for non-native arches).
+# packages: space-separated package names, or 'all' to build every native package.
 # Example: just test-native-wheels                               # host arch only, all native packages
 # Example: just test-native-wheels "x86_64 i686 aarch64"          # multi-arch (nightly/release)
 # Example: just test-native-wheels auto "dissect.util dissect.fve" # specific packages only
 test-native-wheels archs="auto" packages="all":
     #!/usr/bin/env bash
     set -euo pipefail
-    mapfile -t all_native < <(uv run --python ">=3.12" .monorepo/native_projects.py)
-    if [[ ${#all_native[@]} -eq 0 ]]; then
-        echo "No native projects found."
-        exit 0
-    fi
     if [[ "{{packages}}" == "all" ]]; then
-        to_build=("${all_native[@]}")
+        mapfile -t to_build < <(uv run --python ">=3.12" .monorepo/native_projects.py)
     else
-        read -ra requested <<< "{{packages}}"
-        to_build=()
-        for pkg in "${requested[@]}"; do
-            if printf '%s\n' "${all_native[@]}" | grep -qxF "$pkg"; then
-                to_build+=("$pkg")
-            else
-                echo "[skip] $pkg is not a native project" >&2
-            fi
-        done
-    fi
-    if [[ ${#to_build[@]} -eq 0 ]]; then
-        echo "No native projects to build."
-        exit 0
+        read -ra to_build <<< "{{packages}}"
     fi
     for pkg in "${to_build[@]}"; do
         just build-native-wheels "$pkg" "{{archs}}"
