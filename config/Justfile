@@ -110,7 +110,7 @@ test-all env="3.10" args="":
 test-all-envs:
     #!/usr/bin/env bash
     set -euo pipefail
-    mapfile -t envs < <(uv run --python ">=3.12" .monorepo/matrix.py --format versions)
+    mapfile -t envs < <(uv run --python ">=3.12" .monorepo/python_versions.py --format versions)
     for env in "${envs[@]}"; do
         echo "=== Testing with Python $env ==="
         just test-all "$env"
@@ -196,22 +196,9 @@ build-native-wheels pkg archs="auto":
     set -euo pipefail
     out="dist/{{pkg}}"
     mkdir -p "$out"
-    # Derive CIBW_BUILD identifiers from configured python-versions.
-    # 3.11 -> cp311-*   pypy3.11 -> pp311-*
-    mapfile -t versions < <(uv run --python ">=3.12" .monorepo/matrix.py --format versions)
-    build_ids=()
-    for v in "${versions[@]}"; do
-        if [[ "$v" == pypy* ]]; then
-            numeric="${v#pypy}"; numeric="${numeric//./}"
-            build_ids+=("pp${numeric}-*")
-        else
-            build_ids+=("cp${v//./}-*")
-        fi
-    done
-    # Append cp3??t-* so free-threaded wheels are built in the same pass as abi3/PyPy.
-    # The config difference (no --py-limited-api) is expressed via
-    # [[tool.cibuildwheel.overrides]] in pyproject.toml — no per-pass env overrides needed.
-    cibw_build="${build_ids[*]} cp3??t-*"
+    # CIBW_BUILD lists CPython abi3 + PyPy identifiers for all configured versions,
+    # plus cp3??t-* for free-threaded wheels — all derived by python_versions.py.
+    cibw_build=$(uv run --python ">=3.12" .monorepo/python_versions.py --format cibw-build)
     echo "--- Building abi3 + free-threaded wheels for {{pkg}} (archs: {{archs}}) ---"
     CIBW_BUILD="$cibw_build" CIBW_ARCHS="{{archs}}" \
         uv tool run --from "cibuildwheel==3.3.0" cibuildwheel \

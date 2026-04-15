@@ -166,7 +166,7 @@ The CI pipeline is designed so that all work that can run in parallel does run i
 
 #### `test` job: Python version × OS × variant matrix
 
-The test matrix is generated dynamically from `pyproject.toml` by `matrix.py` and produces:
+The test matrix is generated dynamically from `pyproject.toml` by `python_versions.py` and produces:
 
 ```
 python-versions: ["3.10", "3.11", "3.12", "3.13", "pypy3.11"]

@@ -48,7 +48,7 @@ jobs:
 
       - name: Generate matrix
         id: set-matrix
-        run: uv run --python ">=3.11" --no-project --with packaging python .monorepo/matrix.py --format json >> $GITHUB_OUTPUT
+        run: uv run --python ">=3.11" --no-project --with packaging python .monorepo/python_versions.py --format json >> $GITHUB_OUTPUT
 
   test:
     needs: generate-matrix
