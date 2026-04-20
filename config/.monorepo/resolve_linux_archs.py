@@ -21,7 +21,6 @@ import tomllib
 sys.stdout.reconfigure(newline="\n")
 
 QEMU_MAP = {
-    "i686": "linux/386",
     "ppc64le": "linux/ppc64le",
     "s390x": "linux/s390x",
     "armv7l": "linux/arm/v7",
