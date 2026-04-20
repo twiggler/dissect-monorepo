@@ -8,8 +8,7 @@
 Usage:
     uv run utils/migrate_pr.py <pr-url> [--monorepo-path PATH] [--dry-run]
 
-Always run with --dry-run first to inspect the rewritten diff and draft PR body
-before making any changes.
+Always run with --dry-run first to inspect the draft PR body before making any changes.
 """
 
 import argparse
@@ -18,11 +17,13 @@ import re
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass, field
+import tempfile
+import textwrap
 
 import httpx
 
 GITHUB_API = "https://api.github.com"
+
 # Files that exist in the old per-package repos but have no place in the monorepo.
 # Changes to these files in migrated PRs are dropped and noted in the PR body.
 #
@@ -76,44 +77,27 @@ def fetch_pr(client: httpx.Client, owner: str, repo: str, pr_number: int) -> dic
     return api_get(client, f"/repos/{owner}/{repo}/pulls/{pr_number}").json()
 
 
-def fetch_pr_diff(client: httpx.Client, owner: str, repo: str, pr_number: int) -> str:
-    return api_get(
-        client,
-        f"/repos/{owner}/{repo}/pulls/{pr_number}",
-        accept="application/vnd.github.diff",
-    ).text
-
-
 def fetch_pr_commits(
     client: httpx.Client, owner: str, repo: str, pr_number: int
 ) -> list[dict]:
-    return api_get(
-        client, f"/repos/{owner}/{repo}/pulls/{pr_number}/commits"
-    ).json()
+    return api_get(client, f"/repos/{owner}/{repo}/pulls/{pr_number}/commits").json()
 
 
-def fetch_commit_diff(
-    client: httpx.Client, owner: str, repo: str, sha: str
-) -> str:
-    return api_get(
-        client,
-        f"/repos/{owner}/{repo}/commits/{sha}",
-        accept="application/vnd.github.diff",
-    ).text
+def fetch_pr_files(
+    client: httpx.Client, owner: str, repo: str, pr_number: int
+) -> list[str]:
+    """Return the list of filenames changed by the PR."""
+    return [
+        f["filename"]
+        for f in api_get(client, f"/repos/{owner}/{repo}/pulls/{pr_number}/files").json()
+    ]
 
 
 def fetch_authenticated_user(client: httpx.Client) -> str:
     return api_get(client, "/user").json()["login"]
 
 
-# ── Path rewriting ────────────────────────────────────────────────────────────
-
-
-@dataclass
-class RewriteResult:
-    diff: str
-    dropped_files: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
+# ── Path classification ───────────────────────────────────────────────────────
 
 
 def classify_path(path: str) -> str:
@@ -122,122 +106,9 @@ def classify_path(path: str) -> str:
         return "rewrite"
     if re.match(r"^tests/", path):
         return "rewrite"
-    if path == "pyproject.toml":
-        return "rewrite"
     if path in DROP_FILES:
         return "drop"
     return "warn"
-
-
-def rewrite_path(path: str, package: str) -> str:
-    """Map a 'rewrite'-classified path to its monorepo equivalent."""
-    if re.match(r"^dissect/", path):
-        return f"projects/{package}/src/{path}"
-    if re.match(r"^tests/", path):
-        return f"projects/{package}/{path}"
-    if path == "pyproject.toml":
-        return f"projects/{package}/pyproject.toml"
-    return path
-
-
-def rewrite_diff(raw_diff: str, package: str) -> RewriteResult:
-    """Rewrite all file paths in a raw unified diff string for the monorepo layout.
-
-    Returns a RewriteResult with:
-      - diff: the rewritten diff text, ready for `git apply`
-      - dropped_files: legacy files removed from the diff
-      - warnings: unrecognised root-level files kept in the diff
-    """
-    dropped: list[str] = []
-    warnings: list[str] = []
-
-    # Extract source AND destination paths from all `diff --git a/X b/Y` headers.
-    # For renames, X != Y and both need to be in the action_map so that
-    # `rename from`, `rename to`, `--- a/`, and `+++ b/` lines are all rewritten
-    # consistently with the `diff --git` header.
-    path_pairs = re.findall(r"^diff --git a/(.+) b/(.+)$", raw_diff, re.MULTILINE)
-    source_paths = list(dict.fromkeys(p[0] for p in path_pairs))
-    all_paths = list(dict.fromkeys(p for pair in path_pairs for p in pair))
-
-    # Build old_path → new_path mapping ('__drop__' for dropped files).
-    action_map: dict[str, str] = {}
-    for path in all_paths:
-        action = classify_path(path)
-        if action == "rewrite":
-            action_map[path] = rewrite_path(path, package)
-        elif action == "drop":
-            action_map[path] = "__drop__"
-        else:
-            action_map[path] = path  # keep in diff, unmodified
-
-    # Dropped/warnings are reported for source paths only.
-    dropped = [p for p in source_paths if action_map[p] == "__drop__"]
-    warnings = [p for p in source_paths if action_map[p] == p and classify_path(p) == "warn"]
-
-    diff = raw_diff
-
-    # Remove dropped file blocks entirely (from their `diff --git` line to the
-    # start of the next `diff --git` line, or end of string).
-    for path in dropped:
-        escaped = re.escape(path)
-        diff = re.sub(
-            rf"^diff --git a/{escaped} b/.*?(?=^diff --git |\Z)",
-            "",
-            diff,
-            flags=re.MULTILINE | re.DOTALL,
-        )
-
-    # Rewrite `diff --git a/<old> b/<old>` headers.
-    def _replace_git_header(m: re.Match) -> str:
-        old_a, old_b = m.group(1), m.group(2)
-        new_a = action_map.get(old_a, old_a)
-        new_b = action_map.get(old_b, old_b)
-        if new_a == "__drop__":
-            return m.group(0)
-        return f"diff --git a/{new_a} b/{new_b}"
-
-    diff = re.sub(
-        r"^diff --git a/(.+) b/(.+)$", _replace_git_header, diff, flags=re.MULTILINE
-    )
-
-    # Rewrite `--- a/<old>` lines.
-    def _replace_minus(m: re.Match) -> str:
-        old = m.group(1)
-        new = action_map.get(old, old)
-        return m.group(0) if new == "__drop__" else f"--- a/{new}"
-
-    diff = re.sub(r"^--- a/(.+)$", _replace_minus, diff, flags=re.MULTILINE)
-
-    # Rewrite `+++ b/<old>` lines.
-    def _replace_plus(m: re.Match) -> str:
-        old = m.group(1)
-        new = action_map.get(old, old)
-        return m.group(0) if new == "__drop__" else f"+++ b/{new}"
-
-    diff = re.sub(r"^\+\+\+ b/(.+)$", _replace_plus, diff, flags=re.MULTILINE)
-
-    # Rewrite `rename from <old>` and `rename to <new>` lines produced for renames.
-    # These must match the `diff --git a/` and `b/` paths respectively, otherwise
-    # git apply reports "inconsistent old filename".
-    def _replace_rename_from(m: re.Match) -> str:
-        old = m.group(1)
-        new = action_map.get(old, old)
-        return m.group(0) if new == "__drop__" else f"rename from {new}"
-
-    diff = re.sub(r"^rename from (.+)$", _replace_rename_from, diff, flags=re.MULTILINE)
-
-    def _replace_rename_to(m: re.Match) -> str:
-        old = m.group(1)
-        new = action_map.get(old, old)
-        return m.group(0) if new == "__drop__" else f"rename to {new}"
-
-    diff = re.sub(r"^rename to (.+)$", _replace_rename_to, diff, flags=re.MULTILINE)
-
-    return RewriteResult(diff=diff, dropped_files=dropped, warnings=warnings)
-
-
-def diff_is_empty(diff: str) -> bool:
-    return not re.search(r"^diff --git ", diff, re.MULTILINE)
 
 
 # ── Git helpers ───────────────────────────────────────────────────────────────
@@ -302,9 +173,7 @@ def fetch_lfs_objects(
     git(["remote", "add", remote_name, source_url], cwd=cwd)
     try:
         print("Fetching LFS objects from source ...", file=sys.stderr)
-        # First fetch the git objects so the commit SHA exists locally,
-        # otherwise `git lfs fetch` fails with "not a tree object" because
-        # it calls `git ls-tree` internally to enumerate LFS pointer files.
+        # Fetch git objects first so `git lfs fetch` can call `git ls-tree` on the SHA.
         git(["fetch", remote_name, head_sha], cwd=cwd, check=False)
         proc = git(["lfs", "fetch", remote_name, "FETCH_HEAD"], cwd=cwd, check=False)
         if proc.returncode != 0:
@@ -313,25 +182,131 @@ def fetch_lfs_objects(
         git(["remote", "remove", remote_name], cwd=cwd)
 
 
-def apply_diff_text(
-    diff_text: str, *, cwd: str, check_only: bool = False
-) -> subprocess.CompletedProcess:
-    args = ["apply"]
-    if check_only:
-        args.append("--check")
-    else:
-        args.append("--index")  # stage the changes so `git commit` can pick them up
-    # GIT_LFS_SKIP_SMUDGE=1: write LFS pointer files as-is without trying to
-    # download objects from the source repo's LFS server, which won't have them.
-    env = {**os.environ, "GIT_LFS_SKIP_SMUDGE": "1"}
-    return subprocess.run(
-        ["git", *args],
-        input=diff_text,
-        cwd=cwd,
-        env=env,
-        text=True,
-        capture_output=True,
-    )
+# ── Migration ─────────────────────────────────────────────────────────────────
+
+
+def migrate_commits(
+    source_owner: str,
+    source_repo: str,
+    pr_number: int,
+    num_commits: int,
+    package_name: str,
+    pr_url: str,
+    token: str,
+    monorepo_path: str,
+) -> None:
+    """Rewrite PR commits with git-filter-repo and apply them onto the current branch.
+
+    Uses a temporary clone so no persistent state is left behind.
+
+    Path rewriting is done by git-filter-repo which handles all diff edge cases
+    (renames, binary files, LFS pointers, mode changes) correctly by operating on
+    git objects rather than diff text.
+
+    git-am applies each commit as a patch (context matching). Cherry-pick is NOT used
+    because its 3-way merge base (boundary_sha, with source-repo paths) differs from
+    monorepo HEAD (monorepo paths), causing spurious conflicts on every patched file.
+    """
+    source_url = f"https://x-access-token:{token}@github.com/{source_owner}/{source_repo}.git"
+
+    with tempfile.TemporaryDirectory(prefix="migrate_pr_") as tmp_dir:
+        # 1. Shallow-fetch the PR commits into a throwaway repo.
+        #    depth = num_commits + 1 so the parent of the first PR commit is available
+        #    as the base for cherry-pick's 3-way merge.
+        print("Fetching PR commits ...", file=sys.stderr)
+        subprocess.run(["git", "init", tmp_dir], check=True, capture_output=True)
+        git(
+            [
+                "fetch", "--depth", str(num_commits + 1),
+                source_url, f"refs/pull/{pr_number}/head",
+            ],
+            cwd=tmp_dir,
+        )
+        git(["checkout", "FETCH_HEAD"], cwd=tmp_dir)
+
+        # 2. Rewrite paths and inject Migrated-from trailer with filter-repo.
+        #
+        # Path rules (--filename-callback):
+        #   dissect/...     → projects/<pkg>/src/dissect/...   (source files)
+        #   tests/...       → projects/<pkg>/tests/...          (test files)
+        #   tox.ini         → dropped
+        #   pyproject.toml  → dropped
+        #   anything else   → projects/<pkg>/<original>         (warned in PR body)
+        filename_cb = textwrap.dedent(f"""\
+            if filename.startswith(b"dissect/"):
+                return b"projects/{package_name}/src/" + filename
+            elif filename.startswith(b"tests/"):
+                return b"projects/{package_name}/" + filename
+            elif filename in (b"tox.ini", b"pyproject.toml"):
+                return None
+            else:
+                return b"projects/{package_name}/" + filename
+        """)
+
+        message_cb = textwrap.dedent(f"""\
+            message = message.rstrip()
+            if b"Migrated-from:" not in message:
+                message = message + b"\\n\\nMigrated-from: {pr_url}"
+            return message
+        """)
+
+        proc = subprocess.run(
+            [
+                "git", "filter-repo", "--force",
+                "--filename-callback", filename_cb,
+                "--message-callback", message_cb,
+            ],
+            cwd=tmp_dir,
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            sys.exit(f"error: git filter-repo failed:\n{proc.stderr}")
+
+        # 3. Serialize the rewritten commits as a patch mailbox.
+        #    format-patch encodes all content types (text, binary, LFS pointers) safely.
+        #    The mailbox includes author name/email/date and the full commit message.
+        patches = git(
+            ["format-patch", "--stdout", f"HEAD~{num_commits}..HEAD"],
+            cwd=tmp_dir,
+        )
+        if not patches.stdout.strip():
+            print(
+                "warning: all commits became empty after path rewriting "
+                "(only dropped files were changed). Nothing to apply.",
+                file=sys.stderr,
+            )
+            return
+
+        # 4. Apply the patch series to the monorepo.
+        #    Pure context matching (no --3way): the patches are generated from the
+        #    *rewritten* source commits, so their context lines reflect the current
+        #    state of files in the source repo.  Because migration preserved file
+        #    content verbatim, those context lines match what is in the monorepo —
+        #    even if the source repo has advanced since migration, the monorepo files
+        #    at the affected paths have not changed (only the source repo did).
+        #
+        #    --3way is intentionally omitted: it would use boundary_sha's blobs as
+        #    the merge base, but the monorepo is behind boundary_sha (migration was
+        #    done at an earlier point), causing spurious conflicts on every file the
+        #    source repo touched between migration and the PR base.
+        #
+        #    --committer-date-is-author-date preserves the original commit timestamps.
+        print("Applying rewritten commits ...", file=sys.stderr)
+        am_proc = subprocess.run(
+            ["git", "am", "--committer-date-is-author-date"],
+            input=patches.stdout,
+            cwd=monorepo_path,
+            env={**os.environ},
+            capture_output=True,
+            text=True,
+        )
+        if am_proc.returncode != 0:
+            subprocess.run(["git", "am", "--abort"], cwd=monorepo_path, capture_output=True)
+            sys.exit(
+                f"error: git am failed (patch does not apply cleanly).\n"
+                f"  git output:\n{am_proc.stderr}"
+            )
 
 
 # ── PR body ───────────────────────────────────────────────────────────────────
@@ -360,7 +335,8 @@ def build_pr_body(
     if warnings:
         files = ", ".join(f"`{f}`" for f in warnings)
         warnings_section = (
-            f"\n- The following root-level files require maintainer review: {files}"
+            f"\n- The following root-level files were placed under"
+            f" `projects/{package_name}/` and require maintainer review: {files}"
         )
 
     body = original_body.strip() or "_No description provided._"
@@ -414,9 +390,17 @@ def main() -> None:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Print the rewritten diff and draft PR body; make no changes",
+        help="Print the file classification and draft PR body; make no changes",
     )
     args = parser.parse_args()
+
+    # Check for required external tools.
+    if subprocess.run(["git", "filter-repo", "--version"], capture_output=True).returncode != 0:
+        sys.exit(
+            "error: git-filter-repo is required but not installed.\n"
+            "  pip install git-filter-repo\n"
+            "  or: apt/dnf/brew install git-filter-repo"
+        )
 
     monorepo_path = os.path.abspath(args.monorepo_path)
 
@@ -433,7 +417,7 @@ def main() -> None:
     }
 
     with httpx.Client(headers=client_headers, follow_redirects=True) as client:
-        # Phase 2 — fetch PR data
+        # Phase 2 — fetch PR metadata
         print(f"Fetching PR data for {args.pr_url} ...", file=sys.stderr)
         pr_data = fetch_pr(client, owner, repo, pr_number)
         title = pr_data["title"]
@@ -442,23 +426,24 @@ def main() -> None:
         base_ref = pr_data["base"]["ref"]
         head_sha = pr_data["head"]["sha"]
 
-        print("Fetching PR diff ...", file=sys.stderr)
-        raw_diff = fetch_pr_diff(client, owner, repo, pr_number)
-
         print("Fetching commit list ...", file=sys.stderr)
         commits = fetch_pr_commits(client, owner, repo, pr_number)
+        num_commits = len(commits)
+
+        print("Fetching file list ...", file=sys.stderr)
+        filenames = fetch_pr_files(client, owner, repo, pr_number)
+        dropped_files = [p for p in filenames if classify_path(p) == "drop"]
+        warnings = [p for p in filenames if classify_path(p) == "warn"]
 
         maintainer_login = fetch_authenticated_user(client)
 
-        # Phase 3 — rewrite paths
-        result = rewrite_diff(raw_diff, package_name)
-
-        if result.warnings:
+        if warnings:
             print(
-                "warning: unrecognised root-level files kept in diff (requires review):",
+                f"warning: unrecognised root-level files will be placed under"
+                f" projects/{package_name}/:",
                 file=sys.stderr,
             )
-            for w in result.warnings:
+            for w in warnings:
                 print(f"  {w}", file=sys.stderr)
 
         pr_body = build_pr_body(
@@ -468,18 +453,20 @@ def main() -> None:
             original_body=original_body,
             package_name=package_name,
             original_base_ref=base_ref,
-            dropped_files=result.dropped_files,
-            warnings=result.warnings,
+            dropped_files=dropped_files,
+            warnings=warnings,
         )
 
         if args.dry_run:
-            print("=== REWRITTEN DIFF ===\n")
-            print(result.diff)
+            print("\n=== FILE CLASSIFICATION ===\n")
+            for filename in filenames:
+                action = classify_path(filename)
+                print(f"  [{action:7}] {filename}")
             print("\n=== DRAFT PR BODY ===\n")
             print(pr_body)
             return
 
-        # Phase 4 — apply to monorepo
+        # Phase 3 — apply to monorepo
         branch_name = f"migrate/{package_name}/pr-{pr_number}"
 
         # Verify clean working tree.
@@ -490,74 +477,20 @@ def main() -> None:
                 "Commit or stash your changes first."
             )
 
-        # Fast-fail: check the full PR diff applies before creating the branch.
-        check = apply_diff_text(result.diff, cwd=monorepo_path, check_only=True)
-        if check.returncode != 0:
-            patch_file = os.path.join(
-                monorepo_path, f"{package_name}-pr-{pr_number}.patch"
-            )
-            with open(patch_file, "w") as fh:
-                fh.write(result.diff)
-            sys.exit(
-                f"error: rewritten diff does not apply cleanly.\n"
-                f"  Patch saved to: {patch_file}\n"
-                f"  Resolve conflicts manually, then:\n"
-                f"    git checkout -b {branch_name}\n"
-                f"    git apply {patch_file}\n"
-                f"  git output:\n{check.stderr}"
-            )
-
-        # Create branch.
+        # Create the migration branch.
         git(["checkout", "-b", branch_name], cwd=monorepo_path)
 
-        # Apply each commit individually.
-        print(f"Replaying {len(commits)} commit(s) on branch {branch_name} ...", file=sys.stderr)
-        for i, commit in enumerate(commits, 1):
-            sha = commit["sha"]
-            commit_message = commit["commit"]["message"]
-            author_name = commit["commit"]["author"]["name"]
-            author_email = commit["commit"]["author"]["email"]
-            author_date = commit["commit"]["author"]["date"]
-            short_sha = sha[:7]
-            short_msg = commit_message.splitlines()[0]
-
-            print(f"  [{i}/{len(commits)}] {short_sha} {short_msg}", file=sys.stderr)
-
-            commit_diff_raw = fetch_commit_diff(client, owner, repo, sha)
-            commit_result = rewrite_diff(commit_diff_raw, package_name)
-
-            if diff_is_empty(commit_result.diff):
-                print(
-                    f"    skipping {short_sha}: diff is empty after path rewriting "
-                    f"(all files were dropped)",
-                    file=sys.stderr,
-                )
-                continue
-
-            apply_proc = apply_diff_text(commit_result.diff, cwd=monorepo_path)
-            if apply_proc.returncode != 0:
-                patch_file = os.path.join(
-                    monorepo_path, f"{package_name}-pr-{pr_number}-{short_sha}.patch"
-                )
-                with open(patch_file, "w") as fh:
-                    fh.write(commit_result.diff)
-                sys.exit(
-                    f"error: commit {short_sha} does not apply cleanly.\n"
-                    f"  Patch saved to: {patch_file}\n"
-                    f"  git output:\n{apply_proc.stderr}"
-                )
-
-            full_message = f"{commit_message}\n\nMigrated-from: {args.pr_url}"
-            git(
-                ["commit", "-m", full_message],
-                cwd=monorepo_path,
-                env={
-                    "GIT_AUTHOR_NAME": author_name,
-                    "GIT_AUTHOR_EMAIL": author_email,
-                    "GIT_AUTHOR_DATE": author_date,
-                    "GIT_LFS_SKIP_SMUDGE": "1",
-                },
-            )
+        # Rewrite paths with filter-repo and apply onto branch.
+        migrate_commits(
+            source_owner=owner,
+            source_repo=repo,
+            pr_number=pr_number,
+            num_commits=num_commits,
+            package_name=package_name,
+            pr_url=args.pr_url,
+            token=token,
+            monorepo_path=monorepo_path,
+        )
 
         # Fetch LFS objects referenced by the PR head into the local cache so the
         # git-lfs pre-push hook can upload them to the target automatically.
@@ -577,7 +510,7 @@ def main() -> None:
                 f"  git stderr:\n{push_proc.stderr}"
             )
 
-        # Phase 5 — open draft PR and notify.
+        # Phase 4 — open draft PR and notify.
         print("Opening draft PR on monorepo ...", file=sys.stderr)
         pr_resp = client.post(
             f"{GITHUB_API}/repos/{monorepo_owner}/{monorepo_repo}/pulls",
