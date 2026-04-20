@@ -21,9 +21,7 @@ concurrency:
   group: release
   cancel-in-progress: false
 
-permissions:
-  id-token: write  # OIDC Trusted Publishing (used when UV_PUBLISH_TOKEN is not set)
-  contents: write  # push git tags
+permissions: {}
 
 env:
   PYTHON_VERSION: "3.14"
@@ -34,6 +32,9 @@ jobs:
     # Each index maps to a GitHub environment of the same name.
     # Store a PyPI API token as UV_PUBLISH_TOKEN in each environment's secrets.
     environment: ${{ inputs.index }}_release
+    permissions:
+      id-token: write  # OIDC Trusted Publishing (used when UV_PUBLISH_TOKEN is not set)
+      contents: write  # push git tags
     steps:
       # Mint a short-lived installation token for this run.
       # Tags pushed with this token are seen by GitHub as a real user push,

@@ -31,6 +31,8 @@ on:
         options: [pypi, testpypi]
         default: pypi
 
+permissions: {}
+
 jobs:
   # Derive the package name and target index from the trigger.
   # For tag triggers: extract from github.ref_name (e.g. "dissect.util/3.5.0" → "dissect.util").
@@ -38,6 +40,8 @@ jobs:
   prepare:
     name: Prepare
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       packages: ${{ steps.resolve.outputs.packages }}
       index: ${{ steps.resolve.outputs.index }}
@@ -62,6 +66,8 @@ jobs:
     name: Build wheels
     needs: prepare
     if: needs.prepare.outputs.is-native == 'true'
+    permissions:
+      contents: read
     uses: ./.github/workflows/build-native-wheels.yml
     with:
       packages: ${{ needs.prepare.outputs.packages }}

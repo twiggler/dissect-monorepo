@@ -31,6 +31,8 @@ on:
         type: boolean
         default: false
 
+permissions: {}
+
 jobs:
   # Generate the build matrix. Linux x86 arches are split one-per-runner (parallel QEMU).
   # All other platforms are static entries appended by the script.

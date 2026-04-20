@@ -18,12 +18,16 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions: {}
+
 env:
   PYTHON_VERSION: "3.14"
 
 jobs:
   lint:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -37,6 +41,8 @@ jobs:
 
   generate-matrix:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
@@ -53,6 +59,8 @@ jobs:
   test:
     needs: generate-matrix
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.generate-matrix.outputs.matrix) }}
@@ -106,6 +114,8 @@ jobs:
     # macOS x86_64, macOS arm64, Windows. No emulation needed.
     name: Test native wheels
     if: github.event_name == 'push' || github.event_name == 'pull_request'
+    permissions:
+      contents: read
     uses: ./.github/workflows/build-native-wheels.yml
     with:
       include-slow-arches: false
@@ -114,6 +124,8 @@ jobs:
     # All platforms + QEMU arches (i686, ppc64le, s390x, armv7l) — nightly or manual.
     name: Test native wheels (full)
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full-native)
+    permissions:
+      contents: read
     uses: ./.github/workflows/build-native-wheels.yml
     with:
       include-slow-arches: true
