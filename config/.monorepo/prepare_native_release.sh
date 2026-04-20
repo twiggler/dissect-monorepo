@@ -15,6 +15,7 @@
 #   index       — target PyPI index (pypi or testpypi)
 #   is-native   — "true" if any of the packages is a native project
 set -euo pipefail
+TOOLING_PYTHON=$(< "$(dirname "$0")/tooling-python")
 
 if [[ "$EVENT" == "push" ]]; then
     # Tag format: <package>/<version> — extract the package name.
@@ -27,12 +28,12 @@ fi
 
 # Expand "all" to the full list of native projects.
 if [[ "$pkg" == "all" ]]; then
-    mapfile -t pkgs < <(uv run --python ">=3.12" .monorepo/native_projects.py)
+    mapfile -t pkgs < <(uv run --python "$TOOLING_PYTHON" .monorepo/native_projects.py)
     pkg="${pkgs[*]}"
 fi
 
 # Check whether any of the requested packages is a native project.
-mapfile -t native_projects < <(uv run --python ">=3.12" .monorepo/native_projects.py)
+mapfile -t native_projects < <(uv run --python "$TOOLING_PYTHON" .monorepo/native_projects.py)
 is_native=false
 for p in $pkg; do
     if printf '%s\n' "${native_projects[@]}" | grep -qxF "$p"; then

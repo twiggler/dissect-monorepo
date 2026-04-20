@@ -2,6 +2,7 @@
 # Bump the minor version of one or more workspace packages.
 # Usage: bump.sh <package> [<package> ...]  |  bump.sh all
 set -euo pipefail
+TOOLING_PYTHON=$(< "$(dirname "$0")/tooling-python")
 
 if [[ $# -eq 0 ]]; then
     echo "error: specify package names or 'all'" >&2
@@ -40,4 +41,4 @@ if [[ ${#double_bumps[@]} -gt 0 ]]; then
     exit 1
 fi
 
-uv run --python ">=3.12" .monorepo/bump_version.py "${targets[@]}"
+uv run --python "$TOOLING_PYTHON" .monorepo/bump_version.py "${targets[@]}"

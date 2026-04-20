@@ -6,6 +6,7 @@
 #   just test-affected origin/master 3.11
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
+tooling_python := `cat .monorepo/tooling-python`
 
 
 # Publish pending workspace packages to PyPI (or testpypi), then create and push git tags.
@@ -36,7 +37,7 @@ pending-releases *args:
 # Only modifies projects that already declare the dependency.
 # Example: just set-constraint dissect.cstruct ">=4.7,<5"
 set-constraint package specifier:
-    uv run --python ">=3.12" .monorepo/set_constraint.py '{{package}}' '{{specifier}}'
+    uv run --python "{{tooling_python}}" .monorepo/set_constraint.py '{{package}}' '{{specifier}}'
 
 # Bump the minor version of one or more workspace packages.
 # Specify individual package names, or 'all' to bump every workspace member.
@@ -50,7 +51,7 @@ bump +packages:
 
 # Regenerate the dissect meta-package dependency list from current workspace versions.
 update-meta:
-    uv run --python ">=3.12" .monorepo/update_meta_deps.py
+    uv run --python "{{tooling_python}}" .monorepo/update_meta_deps.py
 
 # Run ruff check+format over all projects.
 # Pass fix="true" to auto-fix instead of reporting.
@@ -110,7 +111,7 @@ test-all env="3.10" args="":
 test-all-envs:
     #!/usr/bin/env bash
     set -euo pipefail
-    mapfile -t envs < <(uv run --python ">=3.12" .monorepo/python_versions.py --format versions)
+    mapfile -t envs < <(uv run --python "{{tooling_python}}" .monorepo/python_versions.py --format versions)
     for env in "${envs[@]}"; do
         echo "=== Testing with Python $env ==="
         just test-all "$env"
@@ -121,7 +122,7 @@ test-all-envs:
 test-affected ref="origin/master" env="3.10":
     #!/usr/bin/env bash
     set -euo pipefail
-    packages=$(git diff --name-only {{ref}} | uv run --python ">=3.12" .monorepo/affected_tests.py)
+    packages=$(git diff --name-only {{ref}} | uv run --python "{{tooling_python}}" .monorepo/affected_tests.py)
     if [ -z "$packages" ]; then
         echo "No packages affected. Nothing to do."
         exit 0
@@ -147,7 +148,7 @@ build-native-inplace project env="3.10":
 build-all-native-inplace env="3.10":
     #!/usr/bin/env bash
     set -euo pipefail
-    mapfile -t native_projects < <(uv run --python ">=3.12" .monorepo/native_projects.py)
+    mapfile -t native_projects < <(uv run --python "{{tooling_python}}" .monorepo/native_projects.py)
     if [[ ${#native_projects[@]} -eq 0 ]]; then
         echo "No native projects found."
         exit 0
@@ -198,7 +199,7 @@ build-native-wheels pkg archs="auto":
     mkdir -p "$out"
     # CIBW_BUILD lists CPython abi3 + PyPy identifiers for all configured versions,
     # plus cp3??t-* for free-threaded wheels — all derived by python_versions.py.
-    cibw_build=$(uv run --python ">=3.12" .monorepo/python_versions.py --format cibw-build)
+    cibw_build=$(uv run --python "{{tooling_python}}" .monorepo/python_versions.py --format cibw-build)
     echo "--- Building abi3 + free-threaded wheels for {{pkg}} (archs: {{archs}}) ---"
     CIBW_BUILD="$cibw_build" CIBW_ARCHS="{{archs}}" \
         uv tool run --from "cibuildwheel==3.3.0" cibuildwheel \
@@ -223,7 +224,7 @@ test-native-wheels archs="auto" packages="all":
     #!/usr/bin/env bash
     set -euo pipefail
     if [[ "{{packages}}" == "all" ]]; then
-        mapfile -t to_build < <(uv run --python ">=3.12" .monorepo/native_projects.py)
+        mapfile -t to_build < <(uv run --python "{{tooling_python}}" .monorepo/native_projects.py)
     else
         read -ra to_build <<< "{{packages}}"
     fi
