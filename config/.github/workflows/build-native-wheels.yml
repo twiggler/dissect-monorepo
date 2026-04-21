@@ -44,7 +44,7 @@ jobs:
     outputs:
       matrix: ${{ steps.gen.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Generate build matrix
         id: gen
@@ -63,13 +63,13 @@ jobs:
         include: ${{ fromJSON(needs.generate-matrix.outputs.matrix) }}
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - uses: ./.github/actions/lfs-pull
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v8.0.0
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
@@ -78,7 +78,7 @@ jobs:
 
       - name: Set up QEMU
         if: matrix.needs-qemu == 'true'
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
         with:
           platforms: ${{ matrix.qemu-platform }}
 
@@ -94,7 +94,7 @@ jobs:
 
       - name: Upload wheels
         if: inputs.upload-artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-${{ matrix.platform }}
           path: dist/
