@@ -12,12 +12,20 @@ config/                  ← monorepo template (mirrors the target layout exactl
   pyproject.toml         ← workspace config and shared tool settings
   ruff.toml              ← linter/formatter config
 doc/                     ← design documentation
+migrate/                 ← one-time migration pipeline (build monorepo from upstream)
+  install_config.sh      ← copies config/ into a target monorepo checkout
+  run_pipeline.sh        ← builds a fresh monorepo from the upstream sources
+  migrate.sh             ← clones and merges each upstream project
+  project-list           ← list of upstream repositories to migrate
+  decouple_versions.sh   ← decouples pinned versions between projects
+  internal_deps.py       ← wires up internal workspace dependencies
+  centralize_deps.py     ← centralises shared dependencies
+  centralize_ruff_config.py ← centralises ruff configuration
+  update_project_src_layout.py ← normalises src layout across projects
 tests/unit/              ← unit tests for the scripts in config/.monorepo/
-install_config.sh        ← copies config/ into a target monorepo checkout
-run_pipeline.sh          ← builds a fresh monorepo from the upstream sources
 ```
 
-`config/` is a verbatim mirror of what `install_config.sh` deploys to the target
+`config/` is a verbatim mirror of what `migrate/install_config.sh` deploys to the target
 monorepo root. A file at `config/.monorepo/affected_tests.py` lands at
 `.monorepo/affected_tests.py` in the target. This 1-to-1 mapping means you edit
 files in their deployed location — there is no separate "source vs. installed"
@@ -28,7 +36,7 @@ distinction within `config/`.
 ### Apply config changes to the monorepo
 
 ```sh
-./install_config.sh [TARGET_DIR]
+migrate/install_config.sh [TARGET_DIR]
 ```
 
 Defaults to `../dissect-monorepo` if no target is given.
@@ -36,7 +44,7 @@ Defaults to `../dissect-monorepo` if no target is given.
 ### Build a fresh monorepo from scratch
 
 ```sh
-./run_pipeline.sh [TARGET_DIR]
+migrate/run_pipeline.sh [TARGET_DIR]
 ```
 
 ### Run the unit tests
@@ -48,7 +56,7 @@ uv run --group dev pytest tests/unit
 ### Run the integration tests locally
 
 Point `MONOREPO_FIXTURE` at an already-built monorepo to skip the ~3-minute
-`run_pipeline.sh` build step:
+`migrate/run_pipeline.sh` build step:
 
 ```sh
 MONOREPO_FIXTURE=/tmp/dissect-monorepo-test uv run --group dev pytest tests/integration -v

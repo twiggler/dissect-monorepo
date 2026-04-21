@@ -15,18 +15,18 @@ def monorepo_source(tmp_path_factory):
     """Session-scoped fixture providing a built monorepo directory.
 
     Reuses the directory pointed to by MONOREPO_FIXTURE for fast local
-    iteration; builds a fresh one via run_pipeline.sh on CI.
+    iteration; builds a fresh one via migrate/run_pipeline.sh on CI.
     Read-only tests may use this fixture directly. Mutating tests must
     use the function-scoped ``monorepo`` fixture instead.
     """
     src = os.environ.get("MONOREPO_FIXTURE")
     if src:
         return Path(src)
-    # run_pipeline.sh refuses if the target already exists, so pass a path
+    # migrate/run_pipeline.sh refuses if the target already exists, so pass a path
     # inside the base temp dir that has not been created yet.
     target = tmp_path_factory.getbasetemp() / "monorepo-source"
     subprocess.run(
-        ["bash", "run_pipeline.sh", str(target)],
+        ["bash", "migrate/run_pipeline.sh", str(target)],
         check=True,
         cwd=SCRIPTS_DIR,
     )
