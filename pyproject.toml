@@ -14,4 +14,4 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["config/.monorepo"]
+pythonpath = ["template/.monorepo"]

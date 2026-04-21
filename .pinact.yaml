@@ -2,7 +2,7 @@ version: 3
 files:
   - pattern: .github/workflows/*.yml
   - pattern: .github/workflows/*.yaml
-  - pattern: config/.github/workflows/*.yml
-  - pattern: config/.github/workflows/*.yaml
-  - pattern: config/.github/actions/*/action.yml
-  - pattern: config/.github/actions/*/action.yaml
+  - pattern: template/.github/workflows/*.yml
+  - pattern: template/.github/workflows/*.yaml
+  - pattern: template/.github/actions/*/action.yml
+  - pattern: template/.github/actions/*/action.yaml

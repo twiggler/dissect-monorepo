@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Copies (or refreshes) the monorepo-level config files into a target directory.
-# Run this after modifying anything under config/ (Justfile, pyproject.toml,
+# Run this after modifying anything under template/ (Justfile, pyproject.toml,
 # ruff.toml, .github/**, .monorepo/**) without having to redo the full migration.
 #
 # Usage: ./install_config.sh [TARGET_DIR]
@@ -10,7 +10,7 @@ set -euo pipefail
 #               Defaults to a sibling directory named 'dissect-monorepo'.
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
-CONFIG_DIR="$SCRIPT_DIR/../config"
+CONFIG_DIR="$SCRIPT_DIR/../template"
 TARGET_DIR=$(realpath -m "${1:-$SCRIPT_DIR/../../dissect-monorepo}")
 
 if [[ ! -d "$TARGET_DIR" ]]; then

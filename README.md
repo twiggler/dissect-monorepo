@@ -5,7 +5,7 @@ Scripts and configuration for building and maintaining the [dissect](https://git
 ## Repository layout
 
 ```
-config/                  ← monorepo template (mirrors the target layout exactly)
+template/                ← monorepo template (mirrors the target layout exactly)
   .github/workflows/     ← CI workflows deployed to the monorepo
   .monorepo/             ← operational scripts deployed to the monorepo
   Justfile               ← task runner recipes (test, release, bump, …)
@@ -13,7 +13,7 @@ config/                  ← monorepo template (mirrors the target layout exactl
   ruff.toml              ← linter/formatter config
 doc/                     ← design documentation
 migrate/                 ← one-time migration pipeline (build monorepo from upstream)
-  install_config.sh      ← copies config/ into a target monorepo checkout
+  install_config.sh      ← copies template/ into a target monorepo checkout
   run_pipeline.sh        ← builds a fresh monorepo from the upstream sources
   migrate.sh             ← clones and merges each upstream project
   project-list           ← list of upstream repositories to migrate
@@ -22,14 +22,14 @@ migrate/                 ← one-time migration pipeline (build monorepo from up
   centralize_deps.py     ← centralises shared dependencies
   centralize_ruff_config.py ← centralises ruff configuration
   update_project_src_layout.py ← normalises src layout across projects
-tests/unit/              ← unit tests for the scripts in config/.monorepo/
+tests/unit/              ← unit tests for the scripts in template/.monorepo/
 ```
 
-`config/` is a verbatim mirror of what `migrate/install_config.sh` deploys to the target
-monorepo root. A file at `config/.monorepo/affected_tests.py` lands at
+`template/` is a verbatim mirror of what `migrate/install_config.sh` deploys to the target
+monorepo root. A file at `template/.monorepo/affected_tests.py` lands at
 `.monorepo/affected_tests.py` in the target. This 1-to-1 mapping means you edit
 files in their deployed location — there is no separate "source vs. installed"
-distinction within `config/`.
+distinction within `template/`.
 
 ## Quickstart
 

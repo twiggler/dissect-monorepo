@@ -10,7 +10,7 @@ import shutil
 SCRIPT_DIR = Path(__file__).parent
 PROJECTS_DIR =  Path("projects")
 ROOT_TOML = Path("pyproject.toml")
-RUFF_CONFIG_FILE = SCRIPT_DIR / "config/ruff.toml"
+RUFF_CONFIG_FILE = SCRIPT_DIR / "template/ruff.toml"
 # ---------------------
 
 def strip_ruff_from_toml(file_path):
