@@ -17,7 +17,7 @@ os = ["ubuntu-latest", "windows-latest"]
 # Arch lists for the Linux x86_64 cibuildwheel runner.
 # linux-x86-archs-pr  — fast subset (host-only, no QEMU) for push/PR builds.
 # linux-x86-archs     — full set (+ QEMU-emulated arches) for nightly/release builds.
-linux-x86-archs-pr = ["x86_64"]
+linux-x86-archs-pr = ["x86_64", "i686"]
 linux-x86-archs = ["x86_64", "i686", "ppc64le", "s390x", "armv7l"]
 
 # ---------------------------------------------------------------------------
