@@ -48,9 +48,9 @@ jobs:
 
       - name: Generate build matrix
         id: gen
-        run: |
-          slow_flag=${{ inputs.include-slow-arches && '--slow' || '' }}
-          python3 .monorepo/resolve_linux_archs.py $slow_flag
+        env:
+          SLOW_FLAG: ${{ inputs.include-slow-arches && '--slow' || '' }}
+        run: python3 .monorepo/resolve_linux_archs.py $SLOW_FLAG
 
   build:
     name: Build / ${{ matrix.platform }}
