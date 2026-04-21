@@ -76,6 +76,14 @@ lint:
 fix:
     just ruff true
 
+# Sync the workspace virtual environment.
+# Creates (or updates) the default venv, installs all workspace packages as
+# editable with all extras and the dev dependency group.
+# Example: just sync
+# Example: just sync 3.12
+sync env="3.10":
+    uv sync --group dev --all-packages --all-extras --python {{env}}
+
 # Run pytest for a single project using `uv` to create the environment.
 # --all-packages installs all workspace members as editable so sibling deps are importable.
 # --all-extras ensures optional dependencies (e.g. backports.zstd) are available.
