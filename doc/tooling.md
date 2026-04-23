@@ -44,7 +44,7 @@ Having a single canonical set of named commands means: developers do not need to
 **Why just** (and not the alternatives):
 
 - *Makefiles*: Make is pervasive but carries significant footguns — silently ignoring errors, implicit rules that activate unexpectedly, and variable expansion behaviour that surprises non-Make experts. It was designed for file-dependency build graphs, not arbitrary task orchestration.
-- *Shell scripts*: Scripts under `.monorepo/` handle logic that is genuinely complex (affected-package detection, version bumping, release orchestration), but they are not suitable as a top-level task runner. Shell scripts have no built-in help output, no argument defaulting, and no standard way to discover what operations are available. `just --list` gives an instant overview of every recipe.
+- *Shell scripts*: Scripts under `.monorepo/` handle logic that is genuinely complex (affected-package detection, release orchestration), but they are not suitable as a top-level task runner. Shell scripts have no built-in help output, no argument defaulting, and no standard way to discover what operations are available. `just --list` gives an instant overview of every recipe. TOML-heavy operations (version bumping, pending-release detection) are implemented in Python (`bump_version.py`) to avoid fragile `sed`/`grep` TOML parsing in shell.
 - *Taskfile / Invoke / nox*: All viable, but less widely known than Make and without just's advantages over Make. just's recipe syntax is designed specifically for task running — it handles multi-line shell scripts, argument passing, and recipe dependencies cleanly, without Make's file-graph semantics getting in the way.
 
 ---

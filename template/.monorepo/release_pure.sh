@@ -61,7 +61,7 @@ fi
 # ---------------------------------------------------------------------------
 # Filter to pending packages only
 # ---------------------------------------------------------------------------
-mapfile -t pending_all < <(.monorepo/pending_releases.sh --names)
+mapfile -t pending_all < <(uv run --python "$TOOLING_PYTHON" .monorepo/bump_version.py pending-releases --names)
 
 to_release=()
 for pkg in "${requested[@]}"; do

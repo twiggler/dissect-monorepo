@@ -1,6 +1,6 @@
-"""Integration tests for bump.sh.
+"""Integration tests for the 'just bump' recipe.
 
-Verifies that bump.sh:
+Verifies that just bump:
 - Increments the minor version of a tagged package
 - Refuses to bump a package whose current version has no release tag (double-bump guard)
 - Refuses to bump a package that has a tag only for an older version (stale tag)
@@ -15,8 +15,13 @@ import tomllib
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _run(cwd, *args):
-    return subprocess.run(args, cwd=cwd, capture_output=True, text=True)
+def _run_bump(monorepo, *packages):
+    return subprocess.run(
+        ["just", "bump", *packages],
+        cwd=monorepo,
+        capture_output=True,
+        text=True,
+    )
 
 
 def _version(monorepo, name):
@@ -43,14 +48,14 @@ def _add_tag(monorepo, name, version):
 # ---------------------------------------------------------------------------
 
 def test_bump_increments_minor_version(monorepo):
-    """bump.sh increments the minor component and resets the patch to 0."""
+    """bump increments the minor component and resets the patch to 0."""
     _clear_tags(monorepo)
     name = "dissect.util"
     original = _version(monorepo, name)
     _add_tag(monorepo, name, original)
 
-    result = _run(monorepo, "bash", ".monorepo/bump.sh", name)
-    assert result.returncode == 0
+    result = _run_bump(monorepo, name)
+    assert result.returncode == 0, result.stderr
 
     new = _version(monorepo, name)
     orig_minor = int(original.split(".")[1])
@@ -60,20 +65,20 @@ def test_bump_increments_minor_version(monorepo):
 
 
 def test_double_bump_guard_rejects_untagged(monorepo):
-    """bump.sh refuses to bump a package whose current version has no release tag."""
+    """bump refuses to bump a package whose current version has no release tag."""
     _clear_tags(monorepo)
-    result = _run(monorepo, "bash", ".monorepo/bump.sh", "dissect.util")
+    result = _run_bump(monorepo, "dissect.util")
     assert result.returncode != 0
     assert "no release tag" in result.stderr
 
 
 def test_double_bump_guard_rejects_stale_tag(monorepo):
-    """bump.sh refuses to bump a package that has a tag for an older version but not the current one."""
+    """bump refuses to bump a package that has a tag for an older version but not the current one."""
     _clear_tags(monorepo)
     name = "dissect.util"
     _add_tag(monorepo, name, "0.0.0")
 
-    result = _run(monorepo, "bash", ".monorepo/bump.sh", name)
+    result = _run_bump(monorepo, name)
     assert result.returncode != 0
     assert "no release tag" in result.stderr
 
@@ -84,7 +89,7 @@ def test_batch_bump_rejects_if_any_target_untagged(monorepo):
     # Tag dissect.util but leave dissect.cstruct untagged.
     _add_tag(monorepo, "dissect.util", _version(monorepo, "dissect.util"))
 
-    result = _run(monorepo, "bash", ".monorepo/bump.sh", "dissect.util", "dissect.cstruct")
+    result = _run_bump(monorepo, "dissect.util", "dissect.cstruct")
     assert result.returncode != 0
     assert "dissect.cstruct" in result.stderr
 
@@ -94,6 +99,6 @@ def test_bump_does_not_modify_file_on_guard_failure(monorepo):
     _clear_tags(monorepo)
     original = _version(monorepo, "dissect.util")
 
-    _run(monorepo, "bash", ".monorepo/bump.sh", "dissect.util")
+    _run_bump(monorepo, "dissect.util")
 
     assert _version(monorepo, "dissect.util") == original

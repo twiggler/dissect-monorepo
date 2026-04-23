@@ -1,20 +1,24 @@
-"""Integration tests for pending_releases.sh.
+"""Integration tests for the 'just pending-releases' recipe.
 
-Verifies that the script correctly identifies packages whose current version
-has no matching git tag (``<name>/<version>``).
+Verifies that just pending-releases correctly identifies packages
+whose current version has no matching git tag (``<name>/<version>``).
 """
 
 import subprocess
 import tomllib
-from pathlib import Path
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _run(cwd, *args):
-    return subprocess.run(args, cwd=cwd, capture_output=True, text=True)
+def _run_pending_releases(monorepo, *args):
+    return subprocess.run(
+        ["just", "pending-releases", *args],
+        cwd=monorepo,
+        capture_output=True,
+        text=True,
+    )
 
 
 def _version(monorepo, name):
@@ -43,8 +47,8 @@ def _add_tag(monorepo, name, version):
 def test_package_pending_when_untagged(monorepo):
     """All packages appear as pending when no release tags exist."""
     _clear_tags(monorepo)
-    result = _run(monorepo, "bash", ".monorepo/pending_releases.sh", "--names")
-    assert result.returncode == 0
+    result = _run_pending_releases(monorepo, "--names")
+    assert result.returncode == 0, result.stderr
     names = result.stdout.strip().splitlines()
     assert "dissect.util" in names
     assert "dissect.cstruct" in names
@@ -56,8 +60,8 @@ def test_tagged_package_not_in_pending_list(monorepo):
     name = "dissect.util"
     _add_tag(monorepo, name, _version(monorepo, name))
 
-    result = _run(monorepo, "bash", ".monorepo/pending_releases.sh", "--names")
-    assert result.returncode == 0
+    result = _run_pending_releases(monorepo, "--names")
+    assert result.returncode == 0, result.stderr
     names = result.stdout.strip().splitlines()
     assert name not in names
 
@@ -67,7 +71,7 @@ def test_other_packages_still_pending_after_single_tag(monorepo):
     _clear_tags(monorepo)
     _add_tag(monorepo, "dissect.util", _version(monorepo, "dissect.util"))
 
-    result = _run(monorepo, "bash", ".monorepo/pending_releases.sh", "--names")
+    result = _run_pending_releases(monorepo, "--names")
     names = result.stdout.strip().splitlines()
     assert "dissect.cstruct" in names
 
@@ -77,7 +81,7 @@ def test_table_output_shows_tagged_and_pending(monorepo):
     _clear_tags(monorepo)
     _add_tag(monorepo, "dissect.util", _version(monorepo, "dissect.util"))
 
-    result = _run(monorepo, "bash", ".monorepo/pending_releases.sh")
-    assert result.returncode == 0
+    result = _run_pending_releases(monorepo)
+    assert result.returncode == 0, result.stderr
     assert "tagged" in result.stdout
     assert "pending" in result.stdout

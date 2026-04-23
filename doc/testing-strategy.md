@@ -112,7 +112,7 @@ The native wheel build matrix covers many architectures. Not all of them can run
 
 | Architecture | Runner |
 |---|---|
-| `linux/x86_64` | `ubuntu-latest` (x86_64) |
+| `linux/x86_64`, `linux/i686` | `ubuntu-latest` (x86_64) |
 | `linux/aarch64` | `ubuntu-24.04-arm` (native ARM runner) |
 | `macOS arm64` | `macos-latest` |
 | `macOS x86_64` | `macos-15-intel` |
@@ -125,7 +125,6 @@ These run at full hardware speed. The `linux/aarch64` entry uses GitHub's ARM-na
 
 | Architecture | QEMU platform |
 |---|---|
-| `linux/i686` | `linux/386` |
 | `linux/ppc64le` | `linux/ppc64le` |
 | `linux/s390x` | `linux/s390x` |
 | `linux/armv7l` | `linux/arm/v7` |
