@@ -1,9 +1,31 @@
+# Python bytecode
+*.pyc
+__pycache__/
+
+# Build & distribution artefacts
+# setuptools metadata directory created during editable installs
+*.egg-info/
+# build output directory (e.g. from 'python -m build')
+build/
+# wheel and sdist output (produced by 'just release')
+dist/
+
+# Test & coverage artefacts
+# coverage data file produced by pytest-cov
+.coverage
+# XML coverage report (consumed by CI/code quality tools)
+coverage.xml
+.pytest_cache/
+# Sphinx build output and autoapi-generated files produced during docs-check runs
+**/tests/_docs/build/
+**/tests/_docs/api/
+
+# Virtual environments
+.venv/
+
 # In-place compiled Rust extensions (built by 'just build-native-inplace').
 # These are build artefacts — never commit them.
 projects/**/_native.cpython-*.so
 
 # Cargo build cache for native projects.
 projects/**/_native.src/target/
-
-# Built wheels and sdists (release_pure.sh / test-native-wheels output).
-dist/

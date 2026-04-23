@@ -8,6 +8,7 @@ Scripts and configuration for building and maintaining the [dissect](https://git
 template/                ← monorepo template (mirrors the target layout exactly)
   .github/workflows/     ← CI workflows deployed to the monorepo
   .monorepo/             ← operational scripts deployed to the monorepo
+  .gitignore             ← monorepo-wide ignore rules (consolidates per-project .gitignore files)
   Justfile               ← task runner recipes (test, release, bump, …)
   pyproject.toml         ← workspace config and shared tool settings
   ruff.toml              ← linter/formatter config
