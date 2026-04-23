@@ -40,11 +40,14 @@ set-constraint package specifier:
     uv run --python "{{tooling_python}}" .monorepo/set_constraint.py '{{package}}' '{{specifier}}'
 
 # Bump the minor version of one or more workspace packages.
-# Specify individual package names, or 'all' to bump every workspace member.
-# Refuses to bump any package whose current version has no release tag yet —
-# release pending packages first to avoid double-bumps.
+# Specify individual package names, 'all' to bump every workspace member,
+# or 'auto' to bump only packages with new commits since their last release tag
+# (pending packages are silently skipped, not treated as errors).
+# Refuses to bump any explicitly named package whose current version has no
+# release tag yet — release pending packages first to avoid double-bumps.
 # Example: just bump dissect.util dissect.cstruct
 # Example: just bump all
+# Example: just bump auto
 bump +packages:
     uv run --python "{{tooling_python}}" .monorepo/bump_version.py bump {{packages}}
     uv lock

@@ -9,11 +9,14 @@
 """Manage versions for workspace packages.
 
 Subcommands:
-    bump (all | <package>...)
+    bump (all | auto | <package>...)
         Bump the minor version of the given packages.
         'all' expands to every workspace member.
-        Refuses to bump any package whose current version has no release tag —
-        release pending packages first to avoid double-bumps.
+        'auto' bumps every package that both has a release tag for its current
+        version AND has new commits in its project directory since that tag;
+        pending packages (no release tag) are silently skipped.
+        Refuses to bump any explicitly named package whose current version has
+        no release tag — release pending packages first to avoid double-bumps.
 
     pending-releases [--names]
         List packages whose current version has no matching git release tag
@@ -62,6 +65,17 @@ def _has_release_tag(name: str, version: str) -> bool:
     return bool(result.stdout.strip())
 
 
+def _has_commits_since_tag(name: str, version: str, project_dir: Path) -> bool:
+    """Return True if there are commits touching project_dir since the release tag."""
+    result = subprocess.run(
+        ["git", "log", "--oneline", f"{name}/{version}..HEAD", "--", str(project_dir)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return bool(result.stdout.strip())
+
+
 def cmd_pending_releases(args: argparse.Namespace) -> int:
     workspace = _read_workspace_packages()
     pending = []
@@ -87,28 +101,50 @@ def cmd_pending_releases(args: argparse.Namespace) -> int:
 def cmd_bump(args: argparse.Namespace) -> int:
     workspace = _read_workspace_packages()
 
-    if args.packages == ["all"]:
+    if args.packages == ["auto"]:
+        to_bump = []
+        skipped_pending = []
+
+        for project_dir, name, version in sorted(workspace.values(), key=lambda e: e[1]):
+            if not _has_release_tag(name, version):
+                skipped_pending.append(name)
+                continue
+            if not _has_commits_since_tag(name, version, project_dir):
+                continue
+            to_bump.append(name)
+
+        if skipped_pending:
+            print(f"[skip] {len(skipped_pending)} package(s) already bumped and awaiting release:")
+            for name in skipped_pending:
+                print(f"  {name}")
+
+        if not to_bump:
+            print("Nothing to auto-bump.")
+            return 0
+
+        targets = to_bump
+    elif args.packages == ["all"]:
         targets = [name for _dir, name, _ver in sorted(workspace.values(), key=lambda e: e[1])]
     else:
         targets = args.packages
 
-    unknown = [name for name in targets if canonicalize_name(name) not in workspace]
-    if unknown:
-        for name in unknown:
-            print(f"error: unknown package {name!r}", file=sys.stderr)
-        return 1
+        unknown = [name for name in targets if canonicalize_name(name) not in workspace]
+        if unknown:
+            for name in unknown:
+                print(f"error: unknown package {name!r}", file=sys.stderr)
+            return 1
 
-    double_bumps = [
-        name for name in targets
-        if not _has_release_tag(name, workspace[canonicalize_name(name)][2])
-    ]
-    if double_bumps:
-        print("error: the following packages have no release tag for their current version.", file=sys.stderr)
-        print("Release them first, or create the tags manually.", file=sys.stderr)
-        print(file=sys.stderr)
-        for name in double_bumps:
-            print(f"  {name}", file=sys.stderr)
-        return 1
+        double_bumps = [
+            name for name in targets
+            if not _has_release_tag(name, workspace[canonicalize_name(name)][2])
+        ]
+        if double_bumps:
+            print("error: the following packages have no release tag for their current version.", file=sys.stderr)
+            print("Release them first, or create the tags manually.", file=sys.stderr)
+            print(file=sys.stderr)
+            for name in double_bumps:
+                print(f"  {name}", file=sys.stderr)
+            return 1
 
     for name in targets:
         project_dir, declared_name, version = workspace[canonicalize_name(name)]
@@ -148,7 +184,7 @@ def main() -> None:
         "packages",
         nargs="+",
         metavar="package",
-        help="Package names, or 'all' to bump every workspace member.",
+        help="Package names, 'all' to bump every workspace member, or 'auto' to bump packages with new commits since their last release tag.",
     )
 
     args = parser.parse_args()
