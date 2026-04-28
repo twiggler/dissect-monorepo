@@ -51,7 +51,11 @@ run uv run "$SCRIPT_DIR/centralize_ruff_config.py"
 echo "Running update_project_src_layout.py"
 run uv run "$SCRIPT_DIR/update_project_src_layout.py"
 
-# 7. Commit the final state
+# 7. update_docs_conf.py (python via uv)
+echo "Running update_docs_conf.py"
+run uv run "$SCRIPT_DIR/update_docs_conf.py"
+
+# 8. Commit the final state
 git add -A
 git commit -m "Initialize monorepo"
 

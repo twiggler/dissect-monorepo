@@ -79,6 +79,26 @@ lint:
 fix:
     just ruff true
 
+# Build the Sphinx API-reference docs for every project that has a tests/_docs/
+# directory and fail if sphinx-build emits any warnings.
+# All workspace packages are installed as editable so autoapi can resolve imports
+# across sibling projects.
+# Example: just docs-check
+docs-check:
+    uv run --group docs --all-packages --all-extras --python "{{tooling_python}}" bash .monorepo/docs-check.sh
+
+# Remove all Sphinx build artefacts (cached environment + autoapi-generated RST
+# files) so that the next docs-check starts from a clean state.
+# Run this after changing conf.py or autoapi_options to avoid stale output.
+# Example: just docs-clean
+docs-clean:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for d in projects/*/tests/_docs; do
+        [[ -d "$d" ]] || continue
+        rm -rf "$d/build" "$d/api"
+    done
+
 # Sync the workspace virtual environment.
 # Creates (or updates) the default venv, installs all workspace packages as
 # editable with all extras and the dev dependency group.

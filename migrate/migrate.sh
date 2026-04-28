@@ -36,9 +36,11 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     # so the monorepo layout becomes: projects/<repo>/src/dissect/...
     # tox.ini and .gitignore are excluded: tox is superseded by `just` recipes in the monorepo,
     # and .gitignore is consolidated into the monorepo root .gitignore.
+    # tests/_docs/Makefile is excluded: the monorepo calls sphinx-build directly via
+    # 'just docs-check', so the per-project Makefile is no longer needed.
     git filter-repo --to-subdirectory-filter "projects/$REPO_PATH" \
         --path-rename "projects/$REPO_PATH/dissect/:projects/$REPO_PATH/src/dissect/" \
-        --invert-paths --path "tox.ini" --path ".gitignore"
+        --invert-paths --path "tox.ini" --path ".gitignore" --path "tests/_docs/Makefile"
     
     popd > /dev/null
 

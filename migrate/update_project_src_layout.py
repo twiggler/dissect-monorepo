@@ -2,7 +2,7 @@
 # dependencies = ["tomlkit"]
 # ///
 
-"""Update pyproject.toml files in projects/ for a correct src/ layout.
+"""Update pyproject.toml files in projects/ for the monorepo src/ layout.
 
 Fixes are applied to every project:
 
@@ -45,6 +45,8 @@ Project-specific fixes:
    `[tool.monorepo] native = true` so that the build-native-inplace Just
    recipe and native_projects.py discovery script can find them.
 """
+
+import re
 
 import tomlkit
 from pathlib import Path

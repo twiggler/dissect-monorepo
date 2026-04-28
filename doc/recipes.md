@@ -168,6 +168,25 @@ Run `vermin` to verify that no project uses Python features newer than the decla
 
 Remove all built wheels and sdists from the `dist/` directory. Refuses to run if `dist/` is a symlink.
 
+#### `just docs-check`
+
+Build the Sphinx API-reference docs for every project that has a `tests/_docs/` directory and fail if sphinx-build emits any warnings. All workspace packages are installed as editable so autoapi can resolve imports across sibling projects. Used by CI on every push/PR.
+
+```
+just docs-check
+```
+
+#### `just docs-clean`
+
+Remove all Sphinx build artefacts — the pickled environment (`tests/_docs/build/`) and the autoapi-generated RST files (`tests/_docs/api/`) — for every project. The next `just docs-check` will then start from a clean slate.
+
+Run this whenever you change `conf.py` or `autoapi_options` to prevent Sphinx from reusing stale cached output. CI never needs this because each runner starts fresh.
+
+```
+just docs-clean
+just docs-clean && just docs-check   # clean rebuild
+```
+
 ---
 
 ## User guides

@@ -8,6 +8,7 @@ dependencies = []
 
 [dependency-groups]
 dev = ["ruff==0.13.1", "vermin>=1.6.0", "pytest>=8.4.0", "pytest-xdist>=3", "typing_extensions"]
+docs = ["sphinx>=8,<9", "sphinx-autoapi", "sphinx_argparse_cli", "furo"]
 
 [tool.monorepo.test]
 python-versions = ["3.10", "3.11", "3.12", "3.13", "pypy3.11"]

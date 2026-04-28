@@ -20,6 +20,7 @@ The testing strategy is therefore layered: a fast workspace-based test run gives
 | `test (variant=native)` | every push / PR | Native packages — Rust built in-place, workspace environment |
 | `test-native` | every push / PR | Native packages — binary wheel built and tested in isolation, fast arches only |
 | `test-native-full` | nightly (02:00 UTC) / manual | Same as `test-native` but all arches including QEMU |
+| `docs` | every push / PR | Docstring completeness and API-reference build |
 
 ---
 
@@ -210,6 +211,44 @@ cibuildwheel is configured centrally in the root `pyproject.toml` under `[tool.c
 **Skipped targets**: several musl targets (`musllinux_i686`, `musllinux_ppc64le`, `musllinux_s390x`, `musllinux_armv7l`) are skipped because they have no viable Rust cross-compilation support in the cibuildwheel toolchain.
 
 **Test command**: cibuildwheel runs `pytest --force-native {package}/tests` inside each isolated wheel environment. The `--force-native` flag is equivalent to `DISSECT_FORCE_NATIVE=1` — it ensures tests target the Rust code path and do not silently fall back to the pure-Python implementation.
+
+---
+
+### Decision 7: Docs-check — explicitly pin Sphinx to 8.x
+
+Every project in the monorepo ships a `tests/_docs/` directory containing a minimal [Sphinx](https://www.sphinx-doc.org/) configuration. This directory is not a documentation publisher — it is a **docstring linter**. The `docs` CI job runs `sphinx-build --fail-on-warning` across all projects to enforce that the API reference can be built cleanly.
+
+**How it works**: `.monorepo/docs-check.sh` iterates over every `projects/*/tests/_docs/` directory and runs:
+
+```
+sphinx-build -b html -jauto -w <builddir>/warnings.log --fail-on-warning <sourcedir> <builddir>/html
+```
+
+All projects are built sequentially. Failures are collected and reported together at the end so that a single run surfaces all broken projects rather than stopping at the first one.
+
+**Why `--fail-on-warning`**: Sphinx-autoapi emits a warning for every undocumented public symbol and for any docstring that contains invalid RST. Without `--fail-on-warning` these warnings are silent — a missing docstring or broken markup goes unnoticed. Treating warnings as errors turns the build into an active enforcement mechanism rather than a passive report.
+
+**`imported-members` disabled in `autoapi_options`**: sphinx-autoapi's `imported-members` option causes every symbol re-exported via `__init__.py` to be documented at *both* the re-export location (`dissect.foo.Baz`) and the original definition location (`dissect.foo.bar.Baz`). The dissect packages use re-exports pervasively, so this produces duplicate object description warnings across the entire monorepo. Removing `imported-members` from `autoapi_options` is the correct fix: autoapi documents each symbol exactly once, at the module where it is defined.
+
+**`suppress_warnings` for the autoapi import-resolution false-positive**: sphinx-autoapi uses astroid to resolve import chains during the "Mapping Data" phase — before any rendering decisions are made. When a package imports a symbol from a sibling dissect package (e.g. `from dissect.util import ...`), astroid walks up the `dissect` namespace to find its `__init__.py`. Because `dissect` is an implicit namespace package (PEP 420 — no `__init__.py` at the top level), astroid cannot anchor the namespace and emits `autoapi.python_import_resolution`. This happens regardless of whether `imported-members` is enabled or not: disabling `imported-members` stops the duplicate-documentation problem, but the import-resolution step that precedes it still runs and still fails on every cross-package import. Every `conf.py` therefore suppresses this category:
+
+```python
+suppress_warnings = [
+    # https://github.com/readthedocs/sphinx-autoapi/issues/285
+    "autoapi.python_import_resolution",
+]
+```
+
+This suppression is enforced uniformly across all projects by `update_project_src_layout.py`'s `_fix_docs_conf_suppress_warnings()` function.
+
+**Dependencies**: the `docs` CI job uses a dedicated `docs` dependency group in the root `pyproject.toml`:
+
+```toml
+[dependency-groups]
+docs = ["sphinx>=8,<9", "sphinx-autoapi", "sphinx_argparse_cli", "furo"]
+```
+
+Sphinx is pinned to `>=8,<9`. Sphinx 9 introduced a new `ref.python` cross-reference fallback (issue #10785) that, when resolving a `:class:\`type\`` reference in a signature like `type_: type[T]`, searches the entire object registry for attributes named `type` if no class by that name is found. Code that happens to define multiple attributes with the same unqualified name (common in the dissect codebase) triggers a spurious "more than one target found" warning that fails the build. Sphinx 8 does not perform this broader search and silently ignores unresolved `:class:\`type\`` references. Until either sphinx-autoapi avoids emitting the `:class:\`type\`` role for builtin types, or a project-wide intersphinx mapping is added so Sphinx can resolve `type` to `builtins.type` without searching the object registry, **upgrading Sphinx beyond 8.x will break the docs linter**.
 
 ---
 
