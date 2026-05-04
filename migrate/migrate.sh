@@ -38,9 +38,17 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     # and .gitignore is consolidated into the monorepo root .gitignore.
     # tests/_docs/Makefile is excluded: the monorepo calls sphinx-build directly via
     # 'just docs-check', so the per-project Makefile is no longer needed.
+    # Commit messages with bare '#N' PR/issue references are rewritten to qualified
+    # cross-repository links ('fox-it/<repo>#N') so they remain navigable in the monorepo.
+    # GitHub renders 'owner/repo#N' as a clickable cross-repository link:
+    # https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/autolinked-references-and-urls#issues-and-pull-requests
     git filter-repo --to-subdirectory-filter "projects/$REPO_PATH" \
         --path-rename "projects/$REPO_PATH/dissect/:projects/$REPO_PATH/src/dissect/" \
-        --invert-paths --path "tox.ini" --path ".gitignore" --path "tests/_docs/Makefile"
+        --invert-paths --path "tox.ini" --path ".gitignore" --path "tests/_docs/Makefile" \
+        --commit-callback "
+import re
+commit.message = re.sub(rb'(?<!\w)#(\d+)', rb'fox-it/$REPO_PATH#\1', commit.message)
+"
     
     popd > /dev/null
 
