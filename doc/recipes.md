@@ -1,6 +1,112 @@
 # Justfile Recipe Reference
 
-Run `just --list` at any time for a quick summary. This document gives fuller descriptions and user journey guides.
+This document is organised in two parts:
+
+- **[User guides](#user-guides)** — step-by-step walkthroughs for common tasks such as day-to-day development, releasing packages, and running the full test matrix.
+- **[Recipe overview](#recipe-overview)** — a detailed reference for every individual `just` recipe: what it does, all arguments, and usage examples.
+
+Run `just --list` at any time for a quick one-line summary of all available recipes.
+
+---
+
+## Table of contents
+
+- [User guides](#user-guides)
+  - [Day-to-day development](#day-to-day-development)
+  - [Releasing a pure-Python package](#releasing-a-pure-python-package)
+  - [Releasing a batch of packages](#releasing-a-batch-of-packages)
+  - [Releasing a native (Rust) package](#releasing-a-native-rust-package)
+  - [Testing across all Python versions](#testing-across-all-python-versions)
+- [Recipe overview](#recipe-overview)
+  - [Testing](#testing)
+  - [Building native extensions](#building-native-extensions)
+  - [Releasing](#releasing)
+  - [Code quality](#code-quality)
+  - [Maintenance](#maintenance)
+    - [`just sync`](#just-sync-env)
+    - [`just clean`](#just-clean)
+    - [`just docs-check`](#just-docs-check)
+    - [`just docs-clean`](#just-docs-clean)
+
+---
+
+## User guides
+
+### Day-to-day development
+
+1. Make changes to one or more projects.
+2. Run `just test <project> <env>` to check a single project quickly.
+3. Run `just test-affected` before pushing to check all projects touched by your diff.
+4. Run `just lint` to verify formatting and minimum-version compliance.
+
+### Releasing a pure-Python package
+
+1. **Bump the version** — only if the current version has already been released:
+   ```
+   just bump dissect.util
+   ```
+   Commit the `pyproject.toml` and `uv.lock` changes together with the work that motivates the bump.
+
+2. **Tighten a downstream constraint** (only if a new minimum is required):
+   ```
+   just set-constraint dissect.util ">=3.25,<4"
+   ```
+   Commit the changes and updated `uv.lock`.
+
+3. **Dry-run to TestPyPI** (optional but recommended for a first release or structural changes):
+   ```
+   just release dissect.util --index testpypi
+   ```
+
+4. **Release to PyPI**:
+   ```
+   just release dissect.util
+   ```
+   The script publishes the wheel and sdist, then creates and pushes a git tag `dissect.util-<version>`.
+
+5. **Update the meta-package** (if releasing `dissect` itself, or after bulk releases):
+   ```
+   just update-meta
+   just release dissect
+   ```
+
+### Releasing a batch of packages
+
+1. **Auto-bump all packages with new commits** since their last release:
+   ```
+   just bump auto
+   ```
+   This bumps every package that has a release tag for its current version and new commits since that tag. Packages that were already manually bumped (and are therefore pending release) are silently skipped.
+
+2. **Check what is pending**:
+   ```
+   just pending-releases
+   ```
+
+3. **Release all pending packages**:
+   ```
+   just release all
+   ```
+
+### Releasing a native (Rust) package
+
+Native packages cannot be released with `just release` because they require platform-specific wheels built by cibuildwheel. Instead:
+
+1. Bump the version and commit as above.
+2. Trigger the `release-native` GitHub Actions workflow manually (`workflow_dispatch`), specifying the package name. The workflow builds wheels for all platforms and architectures, runs `abi3audit`, and publishes to PyPI via OIDC Trusted Publishing.
+
+To validate the wheel pipeline locally before triggering the workflow:
+```
+just test-native-wheels auto dissect.util
+```
+
+### Testing across all Python versions
+
+```
+just test-all-envs
+```
+
+This runs the full test suite for every Python version in `[tool.monorepo.test].python-versions`. Equivalent to what CI runs on push/PR.
 
 ---
 
@@ -164,6 +270,15 @@ Run `vermin` to verify that no project uses Python features newer than the decla
 
 ### Maintenance
 
+#### `just sync [env]`
+
+Create or update the workspace virtual environment. Installs all workspace packages as editable with all extras and the `dev` dependency group. Useful after cloning or pulling changes that add new dependencies.
+
+```
+just sync
+just sync 3.12
+```
+
 #### `just clean`
 
 Remove all built wheels and sdists from the `dist/` directory. Refuses to run if `dist/` is a symlink.
@@ -186,83 +301,3 @@ Run this whenever you change `conf.py` or `autoapi_options` to prevent Sphinx fr
 just docs-clean
 just docs-clean && just docs-check   # clean rebuild
 ```
-
----
-
-## User guides
-
-### Day-to-day development
-
-1. Make changes to one or more projects.
-2. Run `just test <project> <env>` to check a single project quickly.
-3. Run `just test-affected` before pushing to check all projects touched by your diff.
-4. Run `just lint` to verify formatting and minimum-version compliance.
-
-### Releasing a pure-Python package
-
-1. **Bump the version** — only if the current version has already been released:
-   ```
-   just bump dissect.util
-   ```
-   Commit the `pyproject.toml` and `uv.lock` changes together with the work that motivates the bump.
-
-2. **Tighten a downstream constraint** (only if a new minimum is required):
-   ```
-   just set-constraint dissect.util ">=3.25,<4"
-   ```
-   Commit the changes and updated `uv.lock`.
-
-3. **Dry-run to TestPyPI** (optional but recommended for a first release or structural changes):
-   ```
-   just release dissect.util --index testpypi
-   ```
-
-4. **Release to PyPI**:
-   ```
-   just release dissect.util
-   ```
-   The script publishes the wheel and sdist, then creates and pushes a git tag `dissect.util-<version>`.
-
-5. **Update the meta-package** (if releasing `dissect` itself, or after bulk releases):
-   ```
-   just update-meta
-   just release dissect
-   ```
-
-### Releasing a batch of packages
-
-1. **Auto-bump all packages with new commits** since their last release:
-   ```
-   just bump auto
-   ```
-   This bumps every package that has a release tag for its current version and new commits since that tag. Packages that were already manually bumped (and are therefore pending release) are silently skipped.
-
-2. **Check what is pending**:
-   ```
-   just pending-releases
-   ```
-
-3. **Release all pending packages**:
-   ```
-   just release all
-   ```
-
-### Releasing a native (Rust) package
-
-Native packages cannot be released with `just release` because they require platform-specific wheels built by cibuildwheel. Instead:
-
-1. Bump the version and commit as above.
-2. Trigger the `release-native` GitHub Actions workflow manually (`workflow_dispatch`), specifying the package name. The workflow builds wheels for all platforms and architectures, runs `abi3audit`, and publishes to PyPI via OIDC Trusted Publishing.
-
-To validate the wheel pipeline locally before triggering the workflow:
-```
-just test-native-wheels auto dissect.util
-```
-
-### Testing across all Python versions
-
-```
-just test-all-envs
-```
-
-This runs the full test suite for every Python version in `[tool.monorepo.test].python-versions`. Equivalent to what CI runs on push/PR.
