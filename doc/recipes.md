@@ -17,6 +17,7 @@ Run `just --list` at any time for a quick one-line summary of all available reci
   - [Releasing a batch of packages](#releasing-a-batch-of-packages)
   - [Releasing a native (Rust) package](#releasing-a-native-rust-package)
   - [Testing across all Python versions](#testing-across-all-python-versions)
+- [Configuration variables](#configuration-variables)
 - [Recipe overview](#recipe-overview)
   - [Testing](#testing)
   - [Building native extensions](#building-native-extensions)
@@ -107,6 +108,24 @@ just test-all-envs
 ```
 
 This runs the full test suite for every Python version in `[tool.monorepo.test].python-versions`. Equivalent to what CI runs on push/PR.
+
+---
+
+## Configuration variables
+
+The Justfile declares two module-level variables that are evaluated once when `just` starts.
+
+### `tooling_python`
+
+Read from `.monorepo/tooling-python`. A `uv`-compatible Python version range (e.g. `>=3.12,<3.14`) that selects the interpreter used to run the monorepo's own management scripts — `bump_version.py`, `python_versions.py`, `affected_tests.py`, etc. This version is chosen for what is needed to run the scripts themselves, and is independent of the Python versions the projects support.
+
+Update `.monorepo/tooling-python` when the scripts require a newer Python feature.
+
+### `default_python`
+
+A plain version string (e.g. `3.10`) used as the default `env` argument for every recipe that runs tests, builds extensions, or syncs environments. It should match the first CPython entry in `[tool.monorepo.test].python-versions` in `pyproject.toml`.
+
+If you change the minimum supported Python version in `pyproject.toml`, update `default_python` in the Justfile to match.
 
 ---
 
