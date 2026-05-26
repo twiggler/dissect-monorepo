@@ -62,8 +62,8 @@ update-meta:
 # Run ruff check+format over all projects.
 # Pass fix="true" to auto-fix instead of reporting.
 ruff fix="false":
-    uv run --group dev ruff check {{ if fix == "true" { "--fix" } else { "" } }}
-    uv run --group dev ruff format {{ if fix == "true" { "" } else { "--check" } }}
+    uv run --group dev --python "{{tooling_python}}" ruff check {{ if fix == "true" { "--fix" } else { "" } }}
+    uv run --group dev --python "{{tooling_python}}" ruff format {{ if fix == "true" { "" } else { "--check" } }}
 
 # Internal: run vermin minimum-version check over all projects.
 # `typing_extensions` is excluded because vermin reports it as requiring ~2/~3
@@ -71,7 +71,7 @@ ruff fix="false":
 # unrelated to the actual code under analysis.
 # See: https://github.com/netromdk/vermin/issues/330
 vermin:
-    uv run --group dev vermin -t={{default_python}}- --no-tips --lint --exclude typing_extensions projects
+    uv run --group dev --python "{{tooling_python}}" vermin -t={{default_python}}- --no-tips --lint --exclude typing_extensions projects
 
 # Check formatting and linting (ruff + vermin).
 lint:
