@@ -2,6 +2,7 @@
 # dependencies = ["tomlkit"]
 # ///
 
+import sys
 import tomlkit
 from pathlib import Path
 import shutil
@@ -54,9 +55,9 @@ def strip_ruff_from_toml(file_path):
 def main():
     # 1. Ensure the central config exists first
     if not RUFF_CONFIG_FILE.exists():
-        print(f"ERROR: {RUFF_CONFIG_FILE} not found!")
-        print("Please create the file first with your authoritative settings.")
-        return
+        print(f"ERROR: {RUFF_CONFIG_FILE} not found!", file=sys.stderr)
+        print("Please create the file first with your authoritative settings.", file=sys.stderr)
+        sys.exit(1)
     
     # Copy the central config to the current working directory
     shutil.copy(RUFF_CONFIG_FILE, Path.cwd() / RUFF_CONFIG_FILE.name)

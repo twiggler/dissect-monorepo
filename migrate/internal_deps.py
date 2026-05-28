@@ -2,6 +2,7 @@
 # dependencies = ["tomlkit"]
 # ///
 
+import sys
 import tomlkit
 from pathlib import Path
 
@@ -58,8 +59,8 @@ def patch_pyproject(file_path):
 def main():
     projects_dir = Path("projects")
     if not projects_dir.exists():
-        print("Error: 'projects' directory not found.")
-        return
+        print("Error: 'projects' directory not found.", file=sys.stderr)
+        sys.exit(1)
 
     for toml_path in projects_dir.rglob("pyproject.toml"):
         patch_pyproject(toml_path)

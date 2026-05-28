@@ -2,6 +2,8 @@
 # dependencies = ["tomlkit"]
 # ///
 
+import sys
+
 """Update pyproject.toml files in projects/ for the monorepo src/ layout.
 
 Fixes are applied to every project:
@@ -272,8 +274,8 @@ def _fix_monorepo_native_flag(doc: tomlkit.TOMLDocument) -> bool:
 def main() -> None:
     projects_dir = Path("projects")
     if not projects_dir.exists():
-        print("Error: 'projects' directory not found.")
-        return
+        print("Error: 'projects' directory not found.", file=sys.stderr)
+        sys.exit(1)
 
     for toml_path in sorted(projects_dir.rglob("pyproject.toml")):
         patch_pyproject(toml_path)

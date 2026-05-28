@@ -2,6 +2,8 @@
 # dependencies = []
 # ///
 
+import sys
+
 """Patch tests/_docs/conf.py files in all projects for the monorepo layout.
 
 Fixes applied to every project:
@@ -121,8 +123,8 @@ def _fix_docs_conf_remove_imported_members(conf_path: Path) -> bool:
 def main() -> None:
     projects_dir = Path("projects")
     if not projects_dir.exists():
-        print("Error: 'projects' directory not found.")
-        return
+        print("Error: 'projects' directory not found.", file=sys.stderr)
+        sys.exit(1)
 
     for conf_path in sorted(projects_dir.glob("*/tests/_docs/conf.py")):
         print(f"Processing {conf_path}...")
