@@ -55,7 +55,11 @@ run uv run "$SCRIPT_DIR/update_project_src_layout.py"
 echo "Running update_docs_conf.py"
 run uv run "$SCRIPT_DIR/update_docs_conf.py"
 
-# 8. Commit the final state
+# 8. Generate uv.lock for reproducible builds
+echo "Generating uv.lock"
+run uv lock
+
+# 9. Commit the final state
 git add -A
 git commit -m "Initialize monorepo"
 
