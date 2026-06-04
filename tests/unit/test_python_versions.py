@@ -1,5 +1,7 @@
 """Unit tests for python_versions.py — version-to-identifier mapping."""
 
+import pytest
+
 import python_versions as pv
 
 
@@ -33,19 +35,40 @@ def test_pypy_different_minor():
 
 def test_cibw_build_string_cpython_only():
     result = pv.cibw_build_string(["3.10", "3.11"])
-    assert result == "cp310-* cp311-* cp3??t-*"
+    assert result == "cp310-* cp311-*"
 
 
-def test_cibw_build_string_includes_free_threaded_suffix():
+def test_cibw_build_string_does_not_include_free_threaded():
     result = pv.cibw_build_string(["3.12"])
-    assert result.endswith("cp3??t-*")
+    assert "cp3??t-*" not in result
 
 
 def test_cibw_build_string_mixed_cpython_and_pypy():
     result = pv.cibw_build_string(["3.10", "3.11", "pypy3.11"])
-    assert result == "cp310-* cp311-* pp311-* cp3??t-*"
+    assert result == "cp310-* cp311-* pp311-*"
 
 
 def test_cibw_build_string_empty_versions():
     result = pv.cibw_build_string([])
-    assert result == "cp3??t-*"
+    assert result == ""
+
+
+# ---------------------------------------------------------------------------
+# min_cpython_abi
+# ---------------------------------------------------------------------------
+
+def test_min_cpython_abi_single():
+    assert pv.min_cpython_abi(["3.10"]) == "cp310"
+
+
+def test_min_cpython_abi_picks_minimum():
+    assert pv.min_cpython_abi(["3.11", "3.10", "3.12"]) == "cp310"
+
+
+def test_min_cpython_abi_ignores_pypy():
+    assert pv.min_cpython_abi(["3.10", "3.11", "pypy3.11"]) == "cp310"
+
+
+def test_min_cpython_abi_only_pypy_raises():
+    with pytest.raises(ValueError, match="No CPython version"):
+        pv.min_cpython_abi(["pypy3.11"])

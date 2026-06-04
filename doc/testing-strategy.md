@@ -81,7 +81,7 @@ The `build-native-wheels.yml` reusable workflow builds a real binary wheel using
 **Strengths**:
 - Tests the exact artifact that will be published to PyPI: correct wheel tags, stable-ABI compliance, embedded Rust binary, RPATH/linking.
 - The isolated environment catches ghost dependencies (see release strategy) — if the package accidentally relies on something pulled in by the workspace but not declared, tests will fail.
-- Exercises the `abi3` stable-ABI path used for production wheels (CPython 3.10+). The in-place build (Mode A) compiles without `--py-limited-api` and produces a version-specific `.so`; cibuildwheel compiles with `--py-limited-api=cp310` and exercises the actual production code path.
+- Exercises the `abi3` stable-ABI path used for production wheels. The in-place build (Mode A) compiles without `--py-limited-api` and produces a version-specific `.so`; cibuildwheel compiles with `--py-limited-api=<min-cpython>` (derived from `[tool.monorepo.test].python-versions`) and exercises the actual production code path.
 - Covers a wider platform matrix than the `test` job: Linux aarch64, macOS arm64, macOS x86_64, Windows amd64, Windows x86 — all without QEMU.
 
 **Weaknesses**:
@@ -202,9 +202,9 @@ The `CI` workflow uses a concurrency group keyed on `${{ github.workflow }}-${{ 
 
 cibuildwheel is configured centrally in the root `pyproject.toml` under `[tool.cibuildwheel]` and is shared by all native packages. Key points:
 
-**Stable ABI (`abi3`) wheels**: wheels are built with `--py-limited-api=cp310`, which produces a single `cp310-abi3` wheel that works on CPython 3.10 through any future 3.x. This halves the number of wheel files to publish (one per platform instead of one per platform × Python version) and is the standard approach for Rust extensions that do not rely on CPython-version-specific internals.
+**Stable ABI (`abi3`) wheels**: wheels are built with `--py-limited-api=<min-cpython>`, where `<min-cpython>` is the lowest CPython version in `[tool.monorepo.test].python-versions` (e.g. `cp310` when the list starts at 3.10). This produces a single `cpNNN-abi3` wheel that works on that version through any future 3.x, halving the number of wheel files to publish (one per platform instead of one per platform × Python version). The flag is derived at build time by `python_versions.py --format min-cpython-abi` and passed via `CIBW_CONFIG_SETTINGS` in the `build-native-wheels` Justfile recipe, so the abi3 floor stays in sync with the test matrix automatically whenever `python-versions` is updated.
 
-**Free-threaded CPython exception**: `cp3??t-*` (free-threaded) builds are opted into via `enable = ["cpython-freethreading"]` but cannot use the stable ABI — an override drops `--py-limited-api=cp310` for those targets only.
+**Free-threaded CPython exception**: `cp3??t-*` (free-threaded) builds are opted into via `enable = ["cpython-freethreading"]` but cannot use the stable ABI — a `[[tool.cibuildwheel.overrides]]` entry for `cp3??t-*` omits `--py-limited-api` for those targets only.
 
 **PyPy**: opted into via `enable = ["pypy", "pypy-eol"]`. PyPy cannot use the stable ABI either, but cibuildwheel's defaults handle this correctly.
 

@@ -42,21 +42,6 @@ Both recipes run `uv lock` after editing `pyproject.toml` files so the workspace
 
 **Rationale**: Analysis of all internal `dissect.*` dependencies across the 31 projects shows that the vast majority use **loose major-version lower bounds** (`>=3,<4`, `>=4,<5`, etc.). Under this scheme, any minor release is automatically compatible with all downstream consumers — no propagation is needed. Propagation is only relevant when a developer intentionally tightens a lower bound to mandate a new minimum minor version, which is a deliberate, infrequent decision. When that decision is made, `just set-constraint` makes the mechanical part a single command — it updates the specifier across every `pyproject.toml` that already declares the dependency — so the developer can focus on the intent rather than hunting down files. The recipe runs `uv lock` afterward to keep the workspace lockfile consistent with the updated constraints.
 
-**Tight lower bounds currently in use**
-
-| Package | Constraint |
-|---|---|
-| `dissect.apfs` | `dissect.fve>=4.2`, `dissect.util>=3.23` |
-| `dissect.archive` | `dissect.util>=3.22` |
-| `dissect.btrfs` | `dissect.util>=3.23` |
-| `dissect.database` | `dissect.util>=3.24` |
-| `dissect.etl` | `dissect.cstruct>=4.6` |
-| `dissect.executable` | `dissect.cstruct>=4.6` |
-| `dissect.fve` | `dissect.util>=3.22` |
-| `dissect.target` | `dissect.database>=1.1`, `dissect.evidence>=3.13`, `dissect.hypervisor>=3.21`, `dissect.ntfs>=3.16`, `dissect.regf>=3.13`, `dissect.volume>=3.17`, `dissect.apfs>=1.1`, `dissect.fve>=4.5`, `dissect.jffs>=1.5`, `dissect.qnxfs>=1.1`, `dissect.vmfs>=3.12` |
-
-Everything else — 23 of 31 packages for most of their dependencies — uses loose major-version bounds.
-
 ---
 
 ### Decision 3: Release detection via git tags

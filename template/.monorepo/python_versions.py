@@ -19,6 +19,9 @@ Usage:
 
     # For cibuildwheel CIBW_BUILD (space-separated identifiers on one line):
     uv run --group dev python .monorepo/python_versions.py --format cibw-build
+
+    # For the --py-limited-api flag (e.g. "cp310" — minimum CPython version):
+    uv run --group dev python .monorepo/python_versions.py --format min-cpython-abi
 """
 
 import argparse
@@ -53,13 +56,25 @@ def version_to_cibw_id(version: str) -> str:
     return f"cp{version.replace('.', '')}-*"
 
 
-def cibw_build_string(versions: list[str]) -> str:
-    """Return the full CIBW_BUILD value for the given version list.
+def min_cpython_abi(versions: list[str]) -> str:
+    """Return the abi3 tag for the minimum CPython version in *versions*.
 
-    Appends ``cp3??t-*`` so free-threaded wheels are built in the same pass.
+    Ignores PyPy entries. Raises ValueError if no CPython version is present.
+
+    Examples:
+        ["3.10", "3.11", "pypy3.11"] -> "cp310"
+        ["3.12"]                       -> "cp312"
     """
+    cpython = [v for v in versions if not v.startswith("pypy")]
+    if not cpython:
+        raise ValueError("No CPython version found in python-versions")
+    minimum = min(cpython, key=lambda v: tuple(int(x) for x in v.split(".")))
+    return "cp" + minimum.replace(".", "")
+
+
+def cibw_build_string(versions: list[str]) -> str:
+    """Return the full CIBW_BUILD value for the given version list."""
     ids = [version_to_cibw_id(v) for v in versions]
-    ids.append("cp3??t-*")
     return " ".join(ids)
 
 
@@ -67,12 +82,13 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--format",
-        choices=["json", "versions", "cibw-build"],
+        choices=["json", "versions", "cibw-build", "min-cpython-abi"],
         required=True,
         help=(
             "'json' for CI GITHUB_OUTPUT, "
             "'versions' for local iteration, "
-            "'cibw-build' for CIBW_BUILD env var"
+            "'cibw-build' for CIBW_BUILD env var, "
+            "'min-cpython-abi' for --py-limited-api (e.g. cp310)"
         ),
     )
     args = parser.parse_args()
@@ -90,8 +106,10 @@ def main() -> None:
     elif args.format == "versions":
         for version in versions:
             print(version)
-    else:
+    elif args.format == "cibw-build":
         print(cibw_build_string(versions))
+    else:
+        print(min_cpython_abi(versions))
 
 
 if __name__ == "__main__":

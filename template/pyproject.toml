@@ -24,22 +24,16 @@ linux-x86-archs = ["x86_64", "i686", "ppc64le", "s390x", "armv7l"]
 # ---------------------------------------------------------------------------
 # cibuildwheel — shared config for all native (Rust) projects.
 # Run with: cibuildwheel --config-file pyproject.toml projects/<pkg>
+# Note that config-settings are overriden in Justfile and should not be used 
 # ---------------------------------------------------------------------------
 [tool.cibuildwheel]
 build-frontend = "build"
 # PyPy and free-threaded CPython are opt-in.
 enable = ["pypy", "pypy-eol", "cpython-freethreading"]
-# Default: abi3 stable-ABI wheel (applies to cp3??-* and pp*-*).
-config-settings = "--build-rust --build-option=--py-limited-api=cp310"
 # Musl targets without Rust support; free-threaded handled via override below.
 skip = ["*-musllinux_i686", "*-musllinux_ppc64le", "*-musllinux_s390x", "*-musllinux_armv7l"]
 test-requires = ["pytest"]
 test-command = "pytest --force-native {package}/tests"
-
-# Free-threaded builds (cp3??t-*) don't support the stable ABI — omit --py-limited-api.
-[[tool.cibuildwheel.overrides]]
-select = "cp3??t-*"
-config-settings = "--build-rust"
 
 [tool.cibuildwheel.linux]
 before-all = "curl -sSf https://sh.rustup.rs | sh -s -- -y"

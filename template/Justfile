@@ -231,11 +231,21 @@ build-native-wheels pkg archs="auto":
     set -euo pipefail
     out="dist/{{pkg}}"
     mkdir -p "$out"
-    # CIBW_BUILD lists CPython abi3 + PyPy identifiers for all configured versions,
-    # plus cp3??t-* for free-threaded wheels — all derived by python_versions.py.
+    # CIBW_BUILD lists abi3 CPython + PyPy identifiers derived from python_versions.py.
+    # Free-threaded targets (cp3??t-*) are handled separately in pass 2.
     cibw_build=$(uv run --python "{{tooling_python}}" .monorepo/python_versions.py --format cibw-build)
+    min_abi=$(uv run --python "{{tooling_python}}" .monorepo/python_versions.py --format min-cpython-abi)
     echo "--- Building abi3 + free-threaded wheels for {{pkg}} (archs: {{archs}}) ---"
+    # Pass 1: abi3 CPython + PyPy — py-limited-api floor derived from python-versions.
     CIBW_BUILD="$cibw_build" CIBW_ARCHS="{{archs}}" \
+        CIBW_CONFIG_SETTINGS="--build-rust --build-option=--py-limited-api=$min_abi" \
+        uv tool run --from "cibuildwheel==3.3.0" cibuildwheel \
+            --config-file pyproject.toml \
+            --output-dir "$out" \
+            "projects/{{pkg}}"
+    # Pass 2: free-threaded builds cannot use Py_LIMITED_API.
+    CIBW_BUILD="cp3??t-*" CIBW_ARCHS="{{archs}}" \
+        CIBW_CONFIG_SETTINGS="--build-rust" \
         uv tool run --from "cibuildwheel==3.3.0" cibuildwheel \
             --config-file pyproject.toml \
             --output-dir "$out" \
