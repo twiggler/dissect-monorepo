@@ -44,7 +44,10 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     # https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/autolinked-references-and-urls#issues-and-pull-requests
     git filter-repo --to-subdirectory-filter "projects/$REPO_PATH" \
         --path-rename "projects/$REPO_PATH/dissect/:projects/$REPO_PATH/src/dissect/" \
-        --invert-paths --path "tox.ini" --path ".gitignore" --path "tests/_docs/Makefile" \
+        --invert-paths \
+        --path "projects/$REPO_PATH/tox.ini" \
+        --path "projects/$REPO_PATH/.gitignore" \
+        --path "projects/$REPO_PATH/tests/_docs/Makefile" \
         --commit-callback "
 import re
 commit.message = re.sub(rb'(?<!\w)#(\d+)', rb'fox-it/$REPO_PATH#\1', commit.message)
