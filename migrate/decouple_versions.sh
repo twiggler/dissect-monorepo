@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
 PROJECTS_FILE="$SCRIPT_DIR/project-list"
@@ -24,15 +25,19 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     echo "Processing $REPO_NAME..."
 
     # 1. Fetch the latest tag name from GitHub
-    # We use -s for silent and pipe to grep/sed to pull the "name" field
-    LATEST_TAG=$(curl -s "$BASE_API/$REPO_NAME/tags" | grep -m 1 '"name":' | cut -d'"' -f4)
+    # --silent: no progress/error output, --fail: exit non-zero on HTTP error (4xx/5xx)
+    if ! TAGS_JSON=$(curl --silent --fail "$BASE_API/$REPO_NAME/tags"); then
+        echo "  [✗] Failed to fetch tags for $REPO_NAME from GitHub API (network or HTTP error)." >&2
+        exit 1
+    fi
+    LATEST_TAG=$(echo "$TAGS_JSON" | grep --max-count=1 '"name":' | cut --delimiter='"' --fields=4) || true  # grep exits 1 on no match; handled below
 
     # 2. Clean the version (e.g., 'v1.2.3' -> '1.2.3')
     CLEAN_VERSION=$(echo "$LATEST_TAG" | sed 's/.*v//;s/[^0-9.]*//g')
 
     if [ -z "$CLEAN_VERSION" ]; then
-        CLEAN_VERSION="0.1.0"
-        echo "  [?] No tag found on GitHub for $REPO_NAME. Defaulting to $CLEAN_VERSION"
+        echo "  [✗] No tag found on GitHub for $REPO_NAME. Cannot determine version." >&2
+        exit 1
     else
         echo "  [✓] GitHub says $REPO_NAME is at version $CLEAN_VERSION"
     fi
