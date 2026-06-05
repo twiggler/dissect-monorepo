@@ -62,6 +62,7 @@ return refname
         --path-rename "projects/$REPO_PATH/dissect/:projects/$REPO_PATH/src/dissect/" \
         --invert-paths \
         --path "projects/$REPO_PATH/tox.ini" \
+        --path "projects/$REPO_PATH/.github" \
         --path "projects/$REPO_PATH/.gitignore" \
         --path "projects/$REPO_PATH/tests/_docs/Makefile" \
         --commit-callback "$COMMIT_CALLBACK" \
