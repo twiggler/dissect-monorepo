@@ -30,28 +30,42 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     
     pushd "$TEMP_CLONE" > /dev/null
     git lfs fetch --all origin
-    
-    # Rewrite history into the projects/ folder
+
+    # Rewrite bare '#N' PR/issue references to qualified cross-repository links
+    # ('fox-it/<repo>#N') so they remain navigable in the monorepo.
+    # GitHub renders 'owner/repo#N' as a clickable cross-repository link:
+    # https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/autolinked-references-and-urls#issues-and-pull-requests
+    COMMIT_CALLBACK="
+import re
+commit.message = re.sub(rb'(?<!\w)#(\d+)', rb'fox-it/$REPO_PATH#\1', commit.message)
+"
+    # Namespace all tags as <repo>/<version> (e.g. v1.2.3 -> dissect.apfs/1.2.3).
+    # The leading 'v' is stripped only when followed by a digit, so non-version
+    # tags like 'validate-fix' become 'dissect.apfs/validate-fix' unchanged.
+    REFNAME_CALLBACK="
+import re
+if refname.startswith(b'refs/tags/'):
+    tag = refname[len(b'refs/tags/'):]
+    tag = re.sub(rb'^v(?=\d)', b'', tag)
+    return b'refs/tags/$REPO_PATH/' + tag
+return refname
+"
+
+    # Rewrite history into the projects/ folder.
     # Also move a top-level `dissect/` directory (if present) into `src/dissect/`
     # so the monorepo layout becomes: projects/<repo>/src/dissect/...
     # tox.ini and .gitignore are excluded: tox is superseded by `just` recipes in the monorepo,
     # and .gitignore is consolidated into the monorepo root .gitignore.
     # tests/_docs/Makefile is excluded: the monorepo calls sphinx-build directly via
     # 'just docs-check', so the per-project Makefile is no longer needed.
-    # Commit messages with bare '#N' PR/issue references are rewritten to qualified
-    # cross-repository links ('fox-it/<repo>#N') so they remain navigable in the monorepo.
-    # GitHub renders 'owner/repo#N' as a clickable cross-repository link:
-    # https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/autolinked-references-and-urls#issues-and-pull-requests
     git filter-repo --to-subdirectory-filter "projects/$REPO_PATH" \
         --path-rename "projects/$REPO_PATH/dissect/:projects/$REPO_PATH/src/dissect/" \
         --invert-paths \
         --path "projects/$REPO_PATH/tox.ini" \
         --path "projects/$REPO_PATH/.gitignore" \
         --path "projects/$REPO_PATH/tests/_docs/Makefile" \
-        --commit-callback "
-import re
-commit.message = re.sub(rb'(?<!\w)#(\d+)', rb'fox-it/$REPO_PATH#\1', commit.message)
-"
+        --commit-callback "$COMMIT_CALLBACK" \
+        --refname-callback "$REFNAME_CALLBACK"
     
     popd > /dev/null
 
