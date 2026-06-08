@@ -67,7 +67,12 @@ return refname
         --path "projects/$REPO_PATH/tests/_docs/Makefile" \
         --commit-callback "$COMMIT_CALLBACK" \
         --refname-callback "$REFNAME_CALLBACK"
-    
+
+    # Save the commit-map before leaving the temp clone.
+    # It maps every old SHA (from the original repo) to the new SHA assigned
+    # by filter-repo, and is used below to translate .git-blame-ignore-revs.
+    cp .git/filter-repo/commit-map "/tmp/commit-map-$REPO_PATH"
+
     popd > /dev/null
 
     # Merge into the existing Monorepo
@@ -85,7 +90,13 @@ return refname
 
     # Internalize LFS objects by fetching them into the monorepo's LFS cache
     git lfs fetch origin_repo --all
-    
+
+    # Translate and aggregate .git-blame-ignore-revs into the monorepo root.
+    # filter-repo rewrites every commit SHA, so the per-project file's hashes
+    # must be mapped to their new values before they are useful.
+    uv run --no-project "$SCRIPT_DIR/update_blame_ignore_revs.py" "$REPO_PATH" "/tmp/commit-map-$REPO_PATH"
+    rm -f "/tmp/commit-map-$REPO_PATH"
+
     # Cleanup remote and temp files
     git remote remove origin_repo
     rm -rf "$TEMP_CLONE"
