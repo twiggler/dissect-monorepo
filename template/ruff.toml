@@ -5,7 +5,6 @@ include = ["projects/**/*.py"]
 
 extend-exclude = [
     "projects/dissect.contrib",  # Template project 
-    "projects/dissect.eventlog", # Formatted using black (?!?)
     "projects/*/examples"        # Skip examples
 ]
 
