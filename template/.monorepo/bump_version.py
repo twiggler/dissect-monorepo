@@ -65,14 +65,29 @@ def _has_release_tag(name: str, version: str) -> bool:
     return bool(result.stdout.strip())
 
 
-def _has_commits_since_tag(name: str, version: str, project_dir: Path) -> bool:
-    """Return True if there are commits touching project_dir since the release tag."""
+def _monorepo_start_ref() -> str | None:
+    """Return 'monorepo/start' if the baseline tag exists, else None."""
     result = subprocess.run(
-        ["git", "log", "--oneline", f"{name}/{version}..HEAD", "--", str(project_dir)],
+        ["git", "tag", "--list", "monorepo/start"],
         capture_output=True,
         text=True,
         check=True,
     )
+    return "monorepo/start" if result.stdout.strip() else None
+
+
+def _has_commits_since_tag(name: str, version: str, project_dir: Path) -> bool:
+    """Return True if there are commits touching project_dir since the release tag.
+
+    When a 'monorepo/start' baseline tag exists, commits reachable from it are
+    also excluded — preventing migration commits from being counted as new work.
+    """
+    cmd = ["git", "log", "--oneline", f"^{name}/{version}"]
+    baseline = _monorepo_start_ref()
+    if baseline:
+        cmd.append(f"^{baseline}")
+    cmd += ["HEAD", "--", str(project_dir)]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
     return bool(result.stdout.strip())
 
 

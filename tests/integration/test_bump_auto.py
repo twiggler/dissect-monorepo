@@ -124,3 +124,34 @@ def test_auto_mixed_scenario(monorepo):
 
     assert _minor(_version(monorepo, "dissect.util")) == _minor(util_version) + 1
     assert _version(monorepo, "dissect.cstruct") == cstruct_version
+
+
+def test_auto_migration_commits_do_not_trigger_bump(monorepo):
+    """Migration commits must not cause packages to be auto-bumped.
+
+    After running the migration pipeline:
+    - all packages have a release tag at their current version
+    - a 'monorepo/start' tag marks the end of the migration
+    - HEAD == monorepo/start, so no post-migration commits exist
+
+    Expected: bump auto reports "Nothing to auto-bump."
+    """
+    _clear_tags(monorepo)
+
+    # Simulate post-migration state: tag every package at its current version.
+    for toml_path in sorted((monorepo / "projects").glob("*/pyproject.toml")):
+        import tomllib
+        data = tomllib.loads(toml_path.read_text())
+        name = data["project"]["name"]
+        version = data["project"]["version"]
+        _add_tag(monorepo, name, version)
+
+    # Place the monorepo/start baseline at the same commit (HEAD).
+    subprocess.run(
+        ["git", "tag", "monorepo/start"],
+        cwd=monorepo, check=True, capture_output=True,
+    )
+
+    result = _run_bump_auto(monorepo)
+    assert result.returncode == 0, result.stderr
+    assert "Nothing to auto-bump." in result.stdout
