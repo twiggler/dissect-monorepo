@@ -62,6 +62,7 @@ run uv lock
 # 9. Commit the final state
 git add -A
 git commit -m "Initialize monorepo"
+git tag monorepo/start
 
 echo
 echo "Pipeline complete."
