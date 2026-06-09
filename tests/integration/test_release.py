@@ -72,6 +72,11 @@ def pypiserver_instance(tmp_path):
             "uvx", "--from", "pypiserver", "pypi-server", "run",
             "--port", str(port),
             "--overwrite",
+            "--disable-fallback",  # return 404 for unknown packages instead of
+                                   # redirecting to PyPI; prevents uv from
+                                   # following a cross-origin redirect and
+                                   # incorrectly using PyPI hashes for the
+                                   # pre-publish existence check (uv >= 0.11.17)
             "-a", ".",   # no authentication required for any action
             "-P", ".",   # no password file (allow anonymous uploads)
             str(packages_dir),
