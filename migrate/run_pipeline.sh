@@ -55,7 +55,11 @@ run uv run "$SCRIPT_DIR/update_project_src_layout.py"
 echo "Running update_docs_conf.py"
 run uv run "$SCRIPT_DIR/update_docs_conf.py"
 
-# 8. Generate uv.lock for reproducible builds
+# 8. update_readme.py — rewrite Build and test instructions sections
+echo "Running update_readme.py"
+run uv run "$SCRIPT_DIR/update_readme.py"
+
+# 9. Generate uv.lock for reproducible builds
 echo "Generating uv.lock"
 run uv lock
 
