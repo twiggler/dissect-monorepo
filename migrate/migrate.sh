@@ -87,6 +87,8 @@ return refname
 
     # Perform the merge with history preservation
     git merge "origin_repo/$BRANCH" --allow-unrelated-histories -m "Merge $REPO_PATH into monorepo"
+    # Mark the merge commit so bump_version can find pre-migration work for this project.
+    git tag "migration/start/$REPO_PATH"
 
     # Internalize LFS objects by fetching them into the monorepo's LFS cache
     git lfs fetch origin_repo --all

@@ -54,10 +54,10 @@ def _bump_minor(version: str) -> str:
     return f"{v.major}.{v.minor + 1}.0"
 
 
-def _has_release_tag(name: str, version: str) -> bool:
-    """Return True if a git tag <name>/<version> exists in the current repository."""
+def _tag_exists(tag: str) -> bool:
+    """Return True if the given git tag exists in the current repository."""
     result = subprocess.run(
-        ["git", "tag", "--list", f"{name}/{version}"],
+        ["git", "tag", "--list", tag],
         capture_output=True,
         text=True,
         check=True,
@@ -65,30 +65,40 @@ def _has_release_tag(name: str, version: str) -> bool:
     return bool(result.stdout.strip())
 
 
-def _monorepo_start_ref() -> str | None:
-    """Return 'monorepo/start' if the baseline tag exists, else None."""
-    result = subprocess.run(
-        ["git", "tag", "--list", "monorepo/start"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return "monorepo/start" if result.stdout.strip() else None
+def _has_release_tag(name: str, version: str) -> bool:
+    return _tag_exists(f"{name}/{version}")
 
 
 def _has_commits_since_tag(name: str, version: str, project_dir: Path) -> bool:
     """Return True if there are commits touching project_dir since the release tag.
 
-    When a 'monorepo/start' baseline tag exists, commits reachable from it are
-    also excluded — preventing migration commits from being counted as new work.
+    Two independent windows are checked to avoid the migration range masking
+    pre-migration work:
+
+      1. Post-migration: commits after migration/end that are not yet released.
+      2. Pre-migration: commits in the project's imported history that arrived
+         via its merge commit (migration/start/<name>) but weren't yet released.
     """
-    cmd = ["git", "log", "--oneline", f"^{name}/{version}"]
-    baseline = _monorepo_start_ref()
-    if baseline:
-        cmd.append(f"^{baseline}")
-    cmd += ["HEAD", "--", str(project_dir)]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-    return bool(result.stdout.strip())
+    release_tag = f"{name}/{version}"
+
+    # 1. Post-migration: new work after the migration window that hasn't been released.
+    post_cmd = [
+        "git", "log", "--oneline",
+        f"^{release_tag}", "^migration/end",
+        "HEAD", "--", str(project_dir),
+    ]
+    if subprocess.run(post_cmd, capture_output=True, text=True, check=True).stdout.strip():
+        return True
+
+    # 2. Pre-migration: unreleased work that was in the project's history when
+    #    it was merged into the monorepo.
+    pre_cmd = [
+        "git", "log", "--oneline",
+        f"^{release_tag}",
+        f"migration/start/{name}",
+        "--", str(project_dir),
+    ]
+    return bool(subprocess.run(pre_cmd, capture_output=True, text=True, check=True).stdout.strip())
 
 
 def cmd_pending_releases(args: argparse.Namespace) -> int:

@@ -33,14 +33,6 @@ def _minor(version: str) -> int:
     return int(version.split(".")[1])
 
 
-def _clear_tags(monorepo):
-    tags = subprocess.run(
-        ["git", "tag", "-l"], cwd=monorepo, capture_output=True, text=True, check=True
-    ).stdout.splitlines()
-    for tag in tags:
-        subprocess.run(["git", "tag", "-d", tag], cwd=monorepo, check=True, capture_output=True)
-
-
 def _add_tag(monorepo, name, version):
     subprocess.run(
         ["git", "tag", f"{name}/{version}"], cwd=monorepo, check=True, capture_output=True
@@ -62,13 +54,14 @@ def _add_commit(monorepo, project_name, message="ci: test commit"):
     )
 
 
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 
 def test_auto_bumps_package_with_new_commits(monorepo):
     """A package with a release tag and new commits gets bumped."""
-    _clear_tags(monorepo)
     name = "dissect.util"
     original = _version(monorepo, name)
     _add_tag(monorepo, name, original)
@@ -84,7 +77,6 @@ def test_auto_bumps_package_with_new_commits(monorepo):
 
 def test_auto_skips_package_without_new_commits(monorepo):
     """A package with a release tag but no new commits is not bumped."""
-    _clear_tags(monorepo)
     name = "dissect.util"
     original = _version(monorepo, name)
     _add_tag(monorepo, name, original)
@@ -96,7 +88,6 @@ def test_auto_skips_package_without_new_commits(monorepo):
 
 def test_auto_silently_skips_pending_packages(monorepo):
     """Packages with no release tag are skipped without error."""
-    _clear_tags(monorepo)
     # No tags at all — every package is pending.
     result = _run_bump_auto(monorepo)
     assert result.returncode == 0, result.stderr
@@ -105,8 +96,6 @@ def test_auto_silently_skips_pending_packages(monorepo):
 
 def test_auto_mixed_scenario(monorepo):
     """Only tagged packages with new commits are bumped; others are skipped."""
-    _clear_tags(monorepo)
-
     util_version = _version(monorepo, "dissect.util")
     cstruct_version = _version(monorepo, "dissect.cstruct")
 
@@ -129,16 +118,13 @@ def test_auto_mixed_scenario(monorepo):
 def test_auto_migration_commits_do_not_trigger_bump(monorepo):
     """Migration commits must not cause packages to be auto-bumped.
 
-    After running the migration pipeline:
-    - all packages have a release tag at their current version
-    - a 'monorepo/start' tag marks the end of the migration
-    - HEAD == monorepo/start, so no post-migration commits exist
+    The monorepo fixture is built by the migration pipeline, which already
+    places migration/start/<name> and migration/end.  Only the release tags need
+    to be added to simulate a freshly migrated state.
 
     Expected: bump auto reports "Nothing to auto-bump."
     """
-    _clear_tags(monorepo)
-
-    # Simulate post-migration state: tag every package at its current version.
+    # Tag every package at its current version (simulating post-migration releases).
     for toml_path in sorted((monorepo / "projects").glob("*/pyproject.toml")):
         import tomllib
         data = tomllib.loads(toml_path.read_text())
@@ -146,12 +132,56 @@ def test_auto_migration_commits_do_not_trigger_bump(monorepo):
         version = data["project"]["version"]
         _add_tag(monorepo, name, version)
 
-    # Place the monorepo/start baseline at the same commit (HEAD).
-    subprocess.run(
-        ["git", "tag", "monorepo/start"],
-        cwd=monorepo, check=True, capture_output=True,
-    )
-
     result = _run_bump_auto(monorepo)
     assert result.returncode == 0, result.stderr
     assert "Nothing to auto-bump." in result.stdout
+
+
+def test_pre_migration_commits_trigger_bump(tmp_path, bump_version_script):
+    """A commit made before the migration must still trigger a bump.
+
+    This test builds a minimal scratch repo to control the exact git history
+    without disturbing the structural tags in the real monorepo fixture:
+
+      A  (release tag dissect.util/1.0.0)
+      B  (unreleased work in projects/dissect.util)  ← must be detected
+      M  (merge commit — tagged migration/start/dissect.util)
+      M2 (tagged migration/end)
+    """
+    repo = tmp_path / "repo"
+    pkg_dir = repo / "projects" / "dissect.util"
+    pkg_dir.mkdir(parents=True)
+    (pkg_dir / "pyproject.toml").write_text(
+        '[project]\nname = "dissect.util"\nversion = "1.0.0"\n'
+    )
+
+    def git(*args):
+        subprocess.run(
+            ["git", "-c", "user.email=t@t.com", "-c", "user.name=T", *args],
+            cwd=repo, check=True, capture_output=True,
+        )
+
+    git("init")
+    git("add", "-A")
+    git("commit", "-m", "initial")          # A
+    git("tag", "dissect.util/1.0.0")        # release tag
+
+    (pkg_dir / ".work").touch()
+    git("add", "-A")
+    git("commit", "-m", "feat: pre-migration work")  # B
+
+    git("commit", "--allow-empty", "-m", "Merge dissect.util into monorepo")  # M
+    git("tag", "migration/start/dissect.util")
+
+    git("commit", "--allow-empty", "-m", "chore: finalize migration")         # M2
+    git("tag", "migration/end")
+
+    result = subprocess.run(
+        ["uv", "run", str(bump_version_script), "bump", "auto"],
+        cwd=repo, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "dissect.util" in result.stdout
+
+    version = tomllib.loads((pkg_dir / "pyproject.toml").read_text())["project"]["version"]
+    assert version == "1.1.0", f"Expected 1.1.0, got {version}"
