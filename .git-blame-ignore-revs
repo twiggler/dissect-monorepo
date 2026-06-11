@@ -1,0 +1,5 @@
+# Commits that only apply bulk formatting/linting and should be skipped by git blame.
+# Configure locally with: git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# chore: lint and format using ruff
+7aa2232
