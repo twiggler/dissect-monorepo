@@ -30,9 +30,7 @@ def load_commit_map(commit_map_path: Path) -> dict[str, str]:
     return mapping
 
 
-def translate(
-    lines: list[str], commit_map: dict[str, str], repo_path: str
-) -> list[str]:
+def translate(lines: list[str], commit_map: dict[str, str], repo_path: str) -> list[str]:
     result = []
     for line in lines:
         stripped = line.rstrip("\n")

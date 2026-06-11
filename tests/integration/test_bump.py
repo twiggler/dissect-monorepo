@@ -10,10 +10,10 @@ Verifies that just bump:
 import subprocess
 import tomllib
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _run_bump(monorepo, *packages):
     return subprocess.run(
@@ -38,14 +38,13 @@ def _clear_tags(monorepo):
 
 
 def _add_tag(monorepo, name, version):
-    subprocess.run(
-        ["git", "tag", f"{name}/{version}"], cwd=monorepo, check=True, capture_output=True
-    )
+    subprocess.run(["git", "tag", f"{name}/{version}"], cwd=monorepo, check=True, capture_output=True)
 
 
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 def test_bump_increments_minor_version(monorepo):
     """bump increments the minor component and resets the patch to 0."""

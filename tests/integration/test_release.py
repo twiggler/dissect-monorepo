@@ -16,10 +16,10 @@ from pathlib import Path
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _free_port() -> int:
     with socket.socket() as s:
@@ -34,16 +34,16 @@ def _wait_for_server(proc: subprocess.Popen, port: int, timeout: float = 15.0) -
             conn = http.client.HTTPConnection("localhost", port, timeout=1)
             conn.request("GET", "/simple/")
             conn.getresponse()
-            return
         except Exception:
             time.sleep(0.2)
+        else:
+            return
+        finally:
+            conn.close()
     stderr = ""
-    if proc.stderr:
-        if select.select([proc.stderr], [], [], 0)[0]:
-            stderr = proc.stderr.read().decode(errors="replace")
-    raise RuntimeError(
-        f"pypiserver did not start on port {port} within {timeout}s\n{stderr}"
-    )
+    if proc.stderr and select.select([proc.stderr], [], [], 0)[0]:
+        stderr = proc.stderr.read().decode(errors="replace")
+    raise RuntimeError(f"pypiserver did not start on port {port} within {timeout}s\n{stderr}")
 
 
 def _version(monorepo: Path, name: str) -> str:
@@ -61,6 +61,7 @@ def _git_tags(monorepo: Path) -> list[str]:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def pypiserver_instance(tmp_path):
     """Start a passwordless local pypiserver; yield (port, packages_dir)."""
@@ -69,16 +70,23 @@ def pypiserver_instance(tmp_path):
     port = _free_port()
     proc = subprocess.Popen(
         [
-            "uvx", "--from", "pypiserver", "pypi-server", "run",
-            "--port", str(port),
+            "uvx",
+            "--from",
+            "pypiserver",
+            "pypi-server",
+            "run",
+            "--port",
+            str(port),
             "--overwrite",
             "--disable-fallback",  # return 404 for unknown packages instead of
-                                   # redirecting to PyPI; prevents uv from
-                                   # following a cross-origin redirect and
-                                   # incorrectly using PyPI hashes for the
-                                   # pre-publish existence check (uv >= 0.11.17)
-            "-a", ".",   # no authentication required for any action
-            "-P", ".",   # no password file (allow anonymous uploads)
+            # redirecting to PyPI; prevents uv from
+            # following a cross-origin redirect and
+            # incorrectly using PyPI hashes for the
+            # pre-publish existence check (uv >= 0.11.17)
+            "-a",
+            ".",  # no authentication required for any action
+            "-P",
+            ".",  # no password file (allow anonymous uploads)
             str(packages_dir),
         ],
         stdout=subprocess.DEVNULL,
@@ -90,15 +98,16 @@ def pypiserver_instance(tmp_path):
     finally:
         proc.terminate()
         try:
-            _, stderr = proc.communicate(timeout=10)
+            proc.communicate(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
-            _, stderr = proc.communicate()
+            proc.communicate()
 
 
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 def test_release_publishes_and_creates_tag(monorepo, pypiserver_instance, tmp_path):
     """release_pure.sh builds, publishes to a local index, and creates a git tag."""
@@ -110,20 +119,23 @@ def test_release_publishes_and_creates_tag(monorepo, pypiserver_instance, tmp_pa
     remote = tmp_path / "remote.git"
     subprocess.run(
         ["git", "clone", "--bare", "--local", str(monorepo), str(remote)],
-        check=True, capture_output=True,
+        check=True,
+        capture_output=True,
     )
     subprocess.run(
         ["git", "remote", "set-url", "origin", str(remote)],
-        cwd=monorepo, check=True, capture_output=True,
+        cwd=monorepo,
+        check=True,
+        capture_output=True,
     )
 
     # Register the local pypiserver as the "testlocal" named index in uv config.
     (monorepo / "uv.toml").write_text(
-        f'[[index]]\n'
+        f"[[index]]\n"
         f'name = "testlocal"\n'
         f'url = "http://localhost:{port}/simple/"\n'
         f'publish-url = "http://localhost:{port}"\n'
-        f'explicit = true\n'
+        f"explicit = true\n"
     )
 
     result = subprocess.run(
@@ -139,10 +151,7 @@ def test_release_publishes_and_creates_tag(monorepo, pypiserver_instance, tmp_pa
     # A distribution file for the package must have been uploaded.
     normalised = name.replace(".", "_").replace("-", "_")
     dists = list(packages_dir.rglob(f"{normalised}-*"))
-    assert dists, (
-        f"No dist file found under {packages_dir}; "
-        f"contents: {list(packages_dir.iterdir())}"
-    )
+    assert dists, f"No dist file found under {packages_dir}; contents: {list(packages_dir.iterdir())}"
 
     # The release tag must exist in the local clone.
     assert f"{name}/{version}" in _git_tags(monorepo)

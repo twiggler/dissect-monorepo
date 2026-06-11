@@ -10,10 +10,10 @@ Verifies that just bump-auto:
 import subprocess
 import tomllib
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _run_bump_auto(monorepo):
     return subprocess.run(
@@ -34,9 +34,7 @@ def _minor(version: str) -> int:
 
 
 def _add_tag(monorepo, name, version):
-    subprocess.run(
-        ["git", "tag", f"{name}/{version}"], cwd=monorepo, check=True, capture_output=True
-    )
+    subprocess.run(["git", "tag", f"{name}/{version}"], cwd=monorepo, check=True, capture_output=True)
 
 
 def _add_commit(monorepo, project_name, message="ci: test commit"):
@@ -45,20 +43,22 @@ def _add_commit(monorepo, project_name, message="ci: test commit"):
     marker.touch()
     subprocess.run(
         ["git", "add", str(marker)],
-        cwd=monorepo, check=True, capture_output=True,
+        cwd=monorepo,
+        check=True,
+        capture_output=True,
     )
     subprocess.run(
-        ["git", "-c", "user.email=test@example.com", "-c", "user.name=Test",
-         "commit", "-m", message],
-        cwd=monorepo, check=True, capture_output=True,
+        ["git", "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", message],
+        cwd=monorepo,
+        check=True,
+        capture_output=True,
     )
-
-
 
 
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 def test_auto_bumps_package_with_new_commits(monorepo):
     """A package with a release tag and new commits gets bumped."""
@@ -127,6 +127,7 @@ def test_auto_migration_commits_do_not_trigger_bump(monorepo):
     # Tag every package at its current version (simulating post-migration releases).
     for toml_path in sorted((monorepo / "projects").glob("*/pyproject.toml")):
         import tomllib
+
         data = tomllib.loads(toml_path.read_text())
         name = data["project"]["name"]
         version = data["project"]["version"]
@@ -151,20 +152,20 @@ def test_pre_migration_commits_trigger_bump(tmp_path, bump_version_script):
     repo = tmp_path / "repo"
     pkg_dir = repo / "projects" / "dissect.util"
     pkg_dir.mkdir(parents=True)
-    (pkg_dir / "pyproject.toml").write_text(
-        '[project]\nname = "dissect.util"\nversion = "1.0.0"\n'
-    )
+    (pkg_dir / "pyproject.toml").write_text('[project]\nname = "dissect.util"\nversion = "1.0.0"\n')
 
     def git(*args):
         subprocess.run(
             ["git", "-c", "user.email=t@t.com", "-c", "user.name=T", *args],
-            cwd=repo, check=True, capture_output=True,
+            cwd=repo,
+            check=True,
+            capture_output=True,
         )
 
     git("init")
     git("add", "-A")
-    git("commit", "-m", "initial")          # A
-    git("tag", "dissect.util/1.0.0")        # release tag
+    git("commit", "-m", "initial")  # A
+    git("tag", "dissect.util/1.0.0")  # release tag
 
     (pkg_dir / ".work").touch()
     git("add", "-A")
@@ -173,12 +174,14 @@ def test_pre_migration_commits_trigger_bump(tmp_path, bump_version_script):
     git("commit", "--allow-empty", "-m", "Merge dissect.util into monorepo")  # M
     git("tag", "migration/start/dissect.util")
 
-    git("commit", "--allow-empty", "-m", "chore: finalize migration")         # M2
+    git("commit", "--allow-empty", "-m", "chore: finalize migration")  # M2
     git("tag", "migration/end")
 
     result = subprocess.run(
         ["uv", "run", str(bump_version_script), "bump", "auto"],
-        cwd=repo, capture_output=True, text=True,
+        cwd=repo,
+        capture_output=True,
+        text=True,
     )
     assert result.returncode == 0, result.stderr
     assert "dissect.util" in result.stdout

@@ -7,10 +7,10 @@ whose current version has no matching git tag (``<name>/<version>``).
 import subprocess
 import tomllib
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _run_pending_releases(monorepo, *args):
     return subprocess.run(
@@ -35,14 +35,13 @@ def _clear_tags(monorepo):
 
 
 def _add_tag(monorepo, name, version):
-    subprocess.run(
-        ["git", "tag", f"{name}/{version}"], cwd=monorepo, check=True, capture_output=True
-    )
+    subprocess.run(["git", "tag", f"{name}/{version}"], cwd=monorepo, check=True, capture_output=True)
 
 
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 def test_package_pending_when_untagged(monorepo):
     """All packages appear as pending when no release tags exist."""

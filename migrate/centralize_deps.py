@@ -27,14 +27,15 @@ The root pyproject.toml is not modified by this script; its [dependency-groups]
 are maintained directly.
 """
 
-import tomlkit
 from pathlib import Path
+
+import tomlkit
 
 PROJECTS_DIR = Path("projects")
 
 
 def clean_subproject(file_path: Path) -> None:
-    with open(file_path, "r", encoding="utf-8") as f:
+    with file_path.open(encoding="utf-8") as f:
         doc = tomlkit.parse(f.read())
 
     modified = False
@@ -44,10 +45,7 @@ def clean_subproject(file_path: Path) -> None:
         dep_groups = doc["dependency-groups"]
 
         # Collect entries from the 'test' group, dropping include-group refs.
-        test_entries = [
-            e for e in dep_groups.get("test", [])
-            if isinstance(e, str)
-        ]
+        test_entries = [e for e in dep_groups.get("test", []) if isinstance(e, str)]
 
         del doc["dependency-groups"]
         modified = True
@@ -71,7 +69,7 @@ def clean_subproject(file_path: Path) -> None:
             del doc["project"]["optional-dependencies"]
 
     if modified:
-        with open(file_path, "w", encoding="utf-8") as f:
+        with file_path.open("w", encoding="utf-8") as f:
             f.write(tomlkit.dumps(doc))
         print(f"  [✓] Cleaned {file_path.parent.name}")
     else:

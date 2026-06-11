@@ -2,17 +2,19 @@
 # dependencies = ["tomlkit"]
 # ///
 
-import sys
-import tomlkit
-from pathlib import Path
 import shutil
+import sys
+from pathlib import Path
+
+import tomlkit
 
 # --- CONFIGURATION ---
 REPO_ROOT = Path(__file__).parent.parent  # monorepo-scripts repo root
-PROJECTS_DIR =  Path("projects")           # target repo (cwd)
-ROOT_TOML = Path("pyproject.toml")         # target repo (cwd)
+PROJECTS_DIR = Path("projects")  # target repo (cwd)
+ROOT_TOML = Path("pyproject.toml")  # target repo (cwd)
 RUFF_CONFIG_FILE = REPO_ROOT / "template/ruff.toml"
 # ---------------------
+
 
 def strip_ruff_from_toml(file_path):
     """Removes [tool.ruff] and its sub-tables from any TOML file,
@@ -21,7 +23,7 @@ def strip_ruff_from_toml(file_path):
     if not file_path.exists():
         return False
 
-    with open(file_path, "r", encoding="utf-8") as f:
+    with file_path.open(encoding="utf-8") as f:
         doc = tomlkit.parse(f.read())
 
     if "tool" in doc and "ruff" in doc["tool"]:
@@ -47,10 +49,11 @@ def strip_ruff_from_toml(file_path):
         if len(doc["tool"]) == 0:
             del doc["tool"]
 
-        with open(file_path, "w", encoding="utf-8") as f:
+        with file_path.open("w", encoding="utf-8") as f:
             f.write(tomlkit.dumps(doc))
         return True
     return False
+
 
 def main():
     # 1. Ensure the central config exists first
@@ -58,7 +61,7 @@ def main():
         print(f"ERROR: {RUFF_CONFIG_FILE} not found!", file=sys.stderr)
         print("Please create the file first with your authoritative settings.", file=sys.stderr)
         sys.exit(1)
-    
+
     # Copy the central config to the current working directory
     shutil.copy(RUFF_CONFIG_FILE, Path.cwd() / RUFF_CONFIG_FILE.name)
     print(f"Copied {RUFF_CONFIG_FILE} to current directory.")
@@ -76,9 +79,10 @@ def main():
         if strip_ruff_from_toml(toml_path):
             print(f"  [✓] Stripped: {toml_path.parent.name}")
             count += 1
-    
+
     print(f"\nSuccess! 31 projects cleaned. Ruff will now default to {RUFF_CONFIG_FILE}.")
     print("Test it by running: uv run ruff check .")
+
 
 if __name__ == "__main__":
     main()

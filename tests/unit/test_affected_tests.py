@@ -4,10 +4,10 @@ from pathlib import Path
 
 import affected_tests as af
 
-
 # ---------------------------------------------------------------------------
 # is_global_trigger
 # ---------------------------------------------------------------------------
+
 
 def test_global_trigger_root_pyproject():
     assert af.is_global_trigger(["pyproject.toml"])
@@ -31,10 +31,12 @@ def test_global_trigger_workflow():
 
 def test_global_trigger_mixed_with_regular():
     # Even a single global-trigger file in a mixed list should trigger all.
-    assert af.is_global_trigger([
-        "projects/dissect.util/dissect/util/__init__.py",
-        "uv.lock",
-    ])
+    assert af.is_global_trigger(
+        [
+            "projects/dissect.util/dissect/util/__init__.py",
+            "uv.lock",
+        ]
+    )
 
 
 def test_not_global_trigger_project_file():
@@ -48,6 +50,7 @@ def test_not_global_trigger_empty():
 # ---------------------------------------------------------------------------
 # transitive_dependents
 # ---------------------------------------------------------------------------
+
 
 def test_transitive_dependents_isolated():
     reverse = {"a": set(), "b": set(), "c": set()}
@@ -89,6 +92,7 @@ def test_transitive_dependents_multiple_seeds():
 # ---------------------------------------------------------------------------
 # build_reverse_graph
 # ---------------------------------------------------------------------------
+
 
 def test_build_reverse_graph_simple(tmp_path):
     # Dependency graph (forward):  pkg-a --> pkg-b
@@ -151,6 +155,7 @@ def test_build_reverse_graph_no_self_loop(tmp_path):
 # packages_from_changed_files
 # ---------------------------------------------------------------------------
 
+
 def test_packages_from_changed_files_match(tmp_path, monkeypatch):
     pkg_dir = tmp_path / "projects" / "pkg-a"
     pkg_dir.mkdir(parents=True)
@@ -177,8 +182,11 @@ def test_packages_from_changed_files_multiple(tmp_path, monkeypatch):
         "pkg-a": ("pkg-a", Path("projects") / "pkg-a"),
         "pkg-b": ("pkg-b", Path("projects") / "pkg-b"),
     }
-    result = af.packages_from_changed_files([
-        "projects/pkg-a/a.py",
-        "projects/pkg-b/b.py",
-    ], workspace)
+    result = af.packages_from_changed_files(
+        [
+            "projects/pkg-a/a.py",
+            "projects/pkg-b/b.py",
+        ],
+        workspace,
+    )
     assert result == {"pkg-a", "pkg-b"}

@@ -3,6 +3,9 @@
 # ///
 
 import sys
+from pathlib import Path
+
+import tomlkit
 
 """Update pyproject.toml files in projects/ for the monorepo src/ layout.
 
@@ -48,11 +51,6 @@ Project-specific fixes:
    recipe and native_projects.py discovery script can find them.
 """
 
-import re
-
-import tomlkit
-from pathlib import Path
-
 
 def _find_build_py(project_root: Path, module: str) -> Path | None:
     """Return the directory that contains <module>.py, searching under project_root."""
@@ -65,7 +63,7 @@ def patch_pyproject(file_path: Path) -> None:
     print(f"Processing {file_path}...")
     project_root = file_path.parent
 
-    with open(file_path, "r", encoding="utf-8") as f:
+    with file_path.open(encoding="utf-8") as f:
         doc = tomlkit.parse(f.read())
 
     changed = False
@@ -78,7 +76,7 @@ def patch_pyproject(file_path: Path) -> None:
     changed |= _fix_monorepo_native_flag(doc)
 
     if changed:
-        with open(file_path, "w", encoding="utf-8") as f:
+        with file_path.open("w", encoding="utf-8") as f:
             f.write(tomlkit.dumps(doc))
         print(f"  [✓] Updated {file_path}")
 

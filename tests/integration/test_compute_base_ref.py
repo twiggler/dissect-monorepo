@@ -8,15 +8,18 @@ import os
 import subprocess
 from pathlib import Path
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _head_sha(cwd):
     return subprocess.run(
         ["git", "rev-parse", "HEAD"],
-        cwd=cwd, capture_output=True, text=True, check=True,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout.strip()
 
 
@@ -24,7 +27,10 @@ def _run_script(cwd, output_file, **env_vars):
     env = {**os.environ, "GITHUB_OUTPUT": str(output_file), **env_vars}
     return subprocess.run(
         ["bash", ".monorepo/compute-base-ref.sh"],
-        cwd=cwd, capture_output=True, text=True, env=env,
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        env=env,
     )
 
 
@@ -42,6 +48,7 @@ def _parse_output(output_file):
 # Tests
 # ---------------------------------------------------------------------------
 
+
 def test_pull_request_uses_pr_base_sha(monorepo_source, tmp_path):
     """pull_request event: ref must equal PR_BASE_SHA."""
     sha = _head_sha(monorepo_source)
@@ -49,7 +56,8 @@ def test_pull_request_uses_pr_base_sha(monorepo_source, tmp_path):
     out.touch()
 
     result = _run_script(
-        monorepo_source, out,
+        monorepo_source,
+        out,
         EVENT_NAME="pull_request",
         PR_BASE_SHA=sha,
         BEFORE_SHA="",
@@ -65,7 +73,8 @@ def test_regular_push_uses_before_sha(monorepo_source, tmp_path):
     out.touch()
 
     result = _run_script(
-        monorepo_source, out,
+        monorepo_source,
+        out,
         EVENT_NAME="push",
         PR_BASE_SHA="",
         BEFORE_SHA=sha,
@@ -80,10 +89,11 @@ def test_missing_before_sha_falls_back_to_head_caret(monorepo_source, tmp_path):
     out.touch()
 
     result = _run_script(
-        monorepo_source, out,
+        monorepo_source,
+        out,
         EVENT_NAME="push",
         PR_BASE_SHA="",
-        BEFORE_SHA="a" * 40,   # valid-length hex but not present in the repo
+        BEFORE_SHA="a" * 40,  # valid-length hex but not present in the repo
     )
     assert result.returncode == 0
     assert _parse_output(out)["ref"] == "HEAD^"

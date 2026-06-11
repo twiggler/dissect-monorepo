@@ -8,6 +8,7 @@ dependencies = []
 [dependency-groups]
 dev = [
     "packaging>=24",
+    "ruff>=0.13.1",
     "tomlkit>=0.13",
     "pytest>=8",
 ]

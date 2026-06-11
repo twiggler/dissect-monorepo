@@ -2,7 +2,9 @@
 # dependencies = []
 # ///
 
+import re
 import sys
+from pathlib import Path
 
 """Patch tests/_docs/conf.py files in all projects for the monorepo layout.
 
@@ -29,9 +31,6 @@ Fixes applied to every project:
    ``type`` attribute shared across many cstruct-derived classes).
 """
 
-import re
-from pathlib import Path
-
 
 def _fix_docs_conf_autoapi_dirs(conf_path: Path) -> bool:
     """Fix autoapi_dirs in tests/_docs/conf.py for the monorepo src/ layout.
@@ -43,7 +42,7 @@ def _fix_docs_conf_autoapi_dirs(conf_path: Path) -> bool:
     """
     old = '["../../dissect/"]'
     new = '["../../src/dissect/"]'
-    pattern = re.compile(r'^(autoapi_dirs\s*=\s*)(\[.*\])', re.MULTILINE)
+    pattern = re.compile(r"^(autoapi_dirs\s*=\s*)(\[.*\])", re.MULTILINE)
 
     text = conf_path.read_text()
 

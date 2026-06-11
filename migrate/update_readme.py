@@ -18,7 +18,6 @@ import re
 import sys
 from pathlib import Path
 
-
 # The section ends just before the next `## ` heading.  We match from the
 # heading line through the last character before the blank-line separator
 # that precedes the next heading.

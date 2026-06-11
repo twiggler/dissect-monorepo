@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+from pathlib import Path
 
 import httpx
 
@@ -41,9 +42,7 @@ def resolve_token() -> str:
     if shutil.which("gh"):
         status = subprocess.run(["gh", "auth", "status"], capture_output=True)
         if status.returncode == 0:
-            result = subprocess.run(
-                ["gh", "auth", "token"], capture_output=True, text=True, check=True
-            )
+            result = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, check=True)
             token = result.stdout.strip()
             if token:
                 return token
@@ -77,20 +76,13 @@ def fetch_pr(client: httpx.Client, owner: str, repo: str, pr_number: int) -> dic
     return api_get(client, f"/repos/{owner}/{repo}/pulls/{pr_number}").json()
 
 
-def fetch_pr_commits(
-    client: httpx.Client, owner: str, repo: str, pr_number: int
-) -> list[dict]:
+def fetch_pr_commits(client: httpx.Client, owner: str, repo: str, pr_number: int) -> list[dict]:
     return api_get(client, f"/repos/{owner}/{repo}/pulls/{pr_number}/commits").json()
 
 
-def fetch_pr_files(
-    client: httpx.Client, owner: str, repo: str, pr_number: int
-) -> list[str]:
+def fetch_pr_files(client: httpx.Client, owner: str, repo: str, pr_number: int) -> list[str]:
     """Return the list of filenames changed by the PR."""
-    return [
-        f["filename"]
-        for f in api_get(client, f"/repos/{owner}/{repo}/pulls/{pr_number}/files").json()
-    ]
+    return [f["filename"] for f in api_get(client, f"/repos/{owner}/{repo}/pulls/{pr_number}/files").json()]
 
 
 def fetch_authenticated_user(client: httpx.Client) -> str:
@@ -217,8 +209,11 @@ def migrate_commits(
         subprocess.run(["git", "init", tmp_dir], check=True, capture_output=True)
         git(
             [
-                "fetch", "--depth", str(num_commits + 1),
-                source_url, f"refs/pull/{pr_number}/head",
+                "fetch",
+                "--depth",
+                str(num_commits + 1),
+                source_url,
+                f"refs/pull/{pr_number}/head",
             ],
             cwd=tmp_dir,
         )
@@ -252,9 +247,13 @@ def migrate_commits(
 
         proc = subprocess.run(
             [
-                "git", "filter-repo", "--force",
-                "--filename-callback", filename_cb,
-                "--message-callback", message_cb,
+                "git",
+                "filter-repo",
+                "--force",
+                "--filename-callback",
+                filename_cb,
+                "--message-callback",
+                message_cb,
             ],
             cwd=tmp_dir,
             capture_output=True,
@@ -303,10 +302,7 @@ def migrate_commits(
         )
         if am_proc.returncode != 0:
             subprocess.run(["git", "am", "--abort"], cwd=monorepo_path, capture_output=True)
-            sys.exit(
-                f"error: git am failed (patch does not apply cleanly).\n"
-                f"  git output:\n{am_proc.stderr}"
-            )
+            sys.exit(f"error: git am failed (patch does not apply cleanly).\n  git output:\n{am_proc.stderr}")
 
 
 # ── PR body ───────────────────────────────────────────────────────────────────
@@ -327,8 +323,7 @@ def build_pr_body(
     if dropped_files:
         files = ", ".join(f"`{f}`" for f in dropped_files)
         dropped_section = (
-            f"\n- The following files were not migrated (no longer needed after"
-            f" `src`-layout migration): {files}"
+            f"\n- The following files were not migrated (no longer needed after `src`-layout migration): {files}"
         )
 
     warnings_section = ""
@@ -402,7 +397,7 @@ def main() -> None:
             "  or: apt/dnf/brew install git-filter-repo"
         )
 
-    monorepo_path = os.path.abspath(args.monorepo_path)
+    monorepo_path = Path(args.monorepo_path).resolve()
 
     # Phase 1 — inputs and inference
     owner, repo, pr_number = parse_pr_url(args.pr_url)
@@ -439,8 +434,7 @@ def main() -> None:
 
         if warnings:
             print(
-                f"warning: unrecognised root-level files will be placed under"
-                f" projects/{package_name}/:",
+                f"warning: unrecognised root-level files will be placed under projects/{package_name}/:",
                 file=sys.stderr,
             )
             for w in warnings:
@@ -472,10 +466,7 @@ def main() -> None:
         # Verify clean working tree.
         status = git(["status", "--porcelain"], cwd=monorepo_path)
         if status.stdout.strip():
-            sys.exit(
-                "error: monorepo working tree is not clean. "
-                "Commit or stash your changes first."
-            )
+            sys.exit("error: monorepo working tree is not clean. Commit or stash your changes first.")
 
         # Create the migration branch.
         git(["checkout", "-b", branch_name], cwd=monorepo_path)
@@ -505,10 +496,7 @@ def main() -> None:
             check=False,
         )
         if push_proc.returncode != 0:
-            sys.exit(
-                f"error: git push failed.\n"
-                f"  git stderr:\n{push_proc.stderr}"
-            )
+            sys.exit(f"error: git push failed.\n  git stderr:\n{push_proc.stderr}")
 
         # Phase 4 — open draft PR and notify.
         print("Opening draft PR on monorepo ...", file=sys.stderr)

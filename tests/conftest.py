@@ -63,7 +63,9 @@ def monorepo(monorepo_source, tmp_path):
     if release_tags:
         subprocess.run(
             ["git", "tag", "-d", *release_tags],
-            cwd=dest, check=True, capture_output=True,
+            cwd=dest,
+            check=True,
+            capture_output=True,
         )
     yield dest
     shutil.rmtree(dest, ignore_errors=True)
