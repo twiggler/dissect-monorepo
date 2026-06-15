@@ -35,15 +35,11 @@ PROJECTS_DIR = Path("projects")
 
 
 def clean_subproject(file_path: Path) -> None:
-    with file_path.open(encoding="utf-8") as f:
-        doc = tomlkit.parse(f.read())
-
+    doc = tomlkit.parse(file_path.read_text(encoding="utf-8"))
     modified = False
 
     # --- [dependency-groups] ---
-    if "dependency-groups" in doc:
-        dep_groups = doc["dependency-groups"]
-
+    if dep_groups := doc.get("dependency-groups"):
         # Collect entries from the 'test' group, dropping include-group refs.
         test_entries = [e for e in dep_groups.get("test", []) if isinstance(e, str)]
 
@@ -69,8 +65,7 @@ def clean_subproject(file_path: Path) -> None:
             del doc["project"]["optional-dependencies"]
 
     if modified:
-        with file_path.open("w", encoding="utf-8") as f:
-            f.write(tomlkit.dumps(doc))
+        file_path.write_text(tomlkit.dumps(doc), encoding="utf-8")
         print(f"  [✓] Cleaned {file_path.parent.name}")
     else:
         print(f"  [-] No changes needed for {file_path.parent.name}")

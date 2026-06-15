@@ -23,8 +23,7 @@ def strip_ruff_from_toml(file_path):
     if not file_path.exists():
         return False
 
-    with file_path.open(encoding="utf-8") as f:
-        doc = tomlkit.parse(f.read())
+    doc = tomlkit.parse(file_path.read_text(encoding="utf-8"))
 
     if "tool" in doc and "ruff" in doc["tool"]:
         ruff = doc["tool"]["ruff"]
@@ -49,8 +48,7 @@ def strip_ruff_from_toml(file_path):
         if len(doc["tool"]) == 0:
             del doc["tool"]
 
-        with file_path.open("w", encoding="utf-8") as f:
-            f.write(tomlkit.dumps(doc))
+        file_path.write_text(tomlkit.dumps(doc), encoding="utf-8")
         return True
     return False
 

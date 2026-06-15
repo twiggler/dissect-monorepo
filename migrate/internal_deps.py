@@ -1,39 +1,39 @@
 # /// script
-# dependencies = ["tomlkit"]
+# dependencies = ["tomlkit", "packaging"]
 # ///
 
 import sys
 from pathlib import Path
 
 import tomlkit
+from packaging.requirements import Requirement
 
 # The prefix for your internal packages
 PREFIX = "dissect."
 
 
-def patch_pyproject(file_path):
+def _filter_dependencies(dependencies: list[str]):
+    for dep in dependencies:
+        req = Requirement(dep)
+        if req.name.startswith(PREFIX):
+            yield req.name
+
+
+def patch_pyproject(file_path: Path) -> None:
     print(f"Processing {file_path}...")
-    with file_path.open(encoding="utf-8") as f:
-        doc = tomlkit.parse(f.read())
+    doc = tomlkit.parse(file_path.read_text(encoding="utf-8"))
 
     # 1. Identify internal dependencies
     internal_deps = set()
 
     # Check main dependencies
-    deps = doc.get("project", {}).get("dependencies", [])
-    for dep in deps:
-        # Extract the package name before any version specifiers (>=, <, etc.)
-        name = dep.split(">")[0].split("=")[0].split("<")[0].split("~")[0].split("[")[0].strip()
-        if name.startswith(PREFIX):
-            internal_deps.add(name)
+    deps: list[str] = doc.get("project", {}).get("dependencies", [])
+    internal_deps.update(_filter_dependencies(deps))
 
     # Check optional dependencies (extras)
     optional_deps = doc.get("project", {}).get("optional-dependencies", {})
     for group in optional_deps.values():
-        for dep in group:
-            name = dep.split(">")[0].split("=")[0].split("<")[0].split("~")[0].split("[")[0].strip()
-            if name.startswith(PREFIX):
-                internal_deps.add(name)
+        internal_deps.update(_filter_dependencies(group))
 
     if not internal_deps:
         print(f"  [-] No internal '{PREFIX}' dependencies found.")
@@ -55,8 +55,7 @@ def patch_pyproject(file_path):
     print(f"  [✓] Added {len(internal_deps)} internal sources to [tool.uv.sources]")
 
     # 3. Write back with formatting preserved
-    with file_path.open("w", encoding="utf-8") as f:
-        f.write(tomlkit.dumps(doc))
+    file_path.write_text(tomlkit.dumps(doc), encoding="utf-8")
 
 
 def main():

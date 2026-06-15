@@ -46,7 +46,7 @@ def _fix_docs_conf_autoapi_dirs(conf_path: Path) -> bool:
 
     text = conf_path.read_text()
 
-    def replacer(m: re.Match) -> str:
+    def replacer(m: re.Match[str]) -> str:
         return m.group(1) + new if m.group(2) == old else m.group(0)
 
     new_text = pattern.sub(replacer, text)

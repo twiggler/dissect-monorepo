@@ -13,8 +13,8 @@ bash "$SCRIPT_DIR/install_config.sh" "$(pwd)"
 while IFS= read -r line || [[ -n "$line" ]]; do
     # Clean the line: remove metadata and domain prefix
     # Converts 'github.com:fox-it/dissect.apfs' to 'dissect.apfs'
-    REPO_PATH=$(echo "$line" | sed 's/\*\]//g' | xargs | sed 's|github.com:fox-it/||')
-    
+    REPO_PATH="${line#*/}"
+
     if [ -z "$REPO_PATH" ]; then continue; fi
 
     echo "----------------------------------------------------"
@@ -22,8 +22,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     echo "----------------------------------------------------"
 
     # Define temp clone path
-    TEMP_CLONE="/tmp/migrate_$REPO_PATH"
-    rm -rf "$TEMP_CLONE"
+    TEMP_CLONE=$(mktemp -d)
 
     # Clone the individual repo
     git clone "$BASE_URL/$REPO_PATH" "$TEMP_CLONE"
