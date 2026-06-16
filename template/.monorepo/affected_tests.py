@@ -18,9 +18,9 @@ Usage:
 """
 
 import sys
+import tomllib
 from pathlib import Path, PurePosixPath
 
-import tomllib
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
 
@@ -30,11 +30,11 @@ PROJECTS_DIR = Path("projects")
 # tested.  Patterns are matched against repo-root-relative POSIX paths using
 # PurePosixPath.match(), which supports ** wildcards.
 GLOBAL_TRIGGER_PATTERNS: tuple[str, ...] = (
-    "pyproject.toml",       # root config / dependency constraints / test matrix
-    "uv.lock",              # resolved environment changed
-    "Justfile",             # test invocation changed
-    ".monorepo/**",         # test infrastructure scripts
-    ".github/workflows/**", # CI workflow definitions
+    "pyproject.toml",  # root config / dependency constraints / test matrix
+    "uv.lock",  # resolved environment changed
+    "Justfile",  # test invocation changed
+    ".monorepo/**",  # test infrastructure scripts
+    ".github/workflows/**",  # CI workflow definitions
 )
 
 
@@ -53,8 +53,7 @@ def load_workspace_packages() -> dict[str, tuple[str, Path]]:
         pyproject = pkg_dir / "pyproject.toml"
         if not pyproject.is_file():
             continue
-        with open(pyproject, "rb") as fh:
-            data = tomllib.load(fh)
+        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
         name = data.get("project", {}).get("name", "")
         if name:
             packages[canonicalize_name(name)] = (name, pkg_dir)
@@ -66,8 +65,8 @@ def build_reverse_graph(workspace: dict[str, tuple[str, Path]]) -> dict[str, set
     reverse: dict[str, set[str]] = {name: set() for name in workspace}
 
     for name, (_, pkg_dir) in workspace.items():
-        with open(pkg_dir / "pyproject.toml", "rb") as fh:
-            data = tomllib.load(fh)
+        pyproject = pkg_dir / "pyproject.toml"
+        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
 
         project = data.get("project", {})
         raw_deps: list[str] = list(project.get("dependencies", []))

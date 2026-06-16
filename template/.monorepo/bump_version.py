@@ -83,9 +83,14 @@ def _has_commits_since_tag(name: str, version: str, project_dir: Path) -> bool:
 
     # 1. Post-migration: new work after the migration window that hasn't been released.
     post_cmd = [
-        "git", "log", "--oneline",
-        f"^{release_tag}", "^migration/end",
-        "HEAD", "--", str(project_dir),
+        "git",
+        "log",
+        "--oneline",
+        f"^{release_tag}",
+        "^migration/end",
+        "HEAD",
+        "--",
+        str(project_dir),
     ]
     if subprocess.run(post_cmd, capture_output=True, text=True, check=True).stdout.strip():
         return True
@@ -93,10 +98,13 @@ def _has_commits_since_tag(name: str, version: str, project_dir: Path) -> bool:
     # 2. Pre-migration: unreleased work that was in the project's history when
     #    it was merged into the monorepo.
     pre_cmd = [
-        "git", "log", "--oneline",
+        "git",
+        "log",
+        "--oneline",
         f"^{release_tag}",
         f"migration/start/{name}",
-        "--", str(project_dir),
+        "--",
+        str(project_dir),
     ]
     return bool(subprocess.run(pre_cmd, capture_output=True, text=True, check=True).stdout.strip())
 
@@ -159,10 +167,7 @@ def cmd_bump(args: argparse.Namespace) -> int:
                 print(f"error: unknown package {name!r}", file=sys.stderr)
             return 1
 
-        double_bumps = [
-            name for name in targets
-            if not _has_release_tag(name, workspace[canonicalize_name(name)][2])
-        ]
+        double_bumps = [name for name in targets if not _has_release_tag(name, workspace[canonicalize_name(name)][2])]
         if double_bumps:
             print("error: the following packages have no release tag for their current version.", file=sys.stderr)
             print("Release them first, or create the tags manually.", file=sys.stderr)
@@ -209,7 +214,10 @@ def main() -> None:
         "packages",
         nargs="+",
         metavar="package",
-        help="Package names, 'all' to bump every workspace member, or 'auto' to bump packages with new commits since their last release tag.",
+        help=(
+            "Package names, 'all' to bump every workspace member, or 'auto' to "
+            "bump packages with new commits since their last release tag."
+        ),
     )
 
     args = parser.parse_args()

@@ -20,7 +20,7 @@ Why not `uv add`?
     groups would require a separate `uv add --optional <group>` call per group
     per project — far more invocations for no benefit.
   - Each `uv add` call re-resolves and rewrites the lockfile. Doing this once
-    per project (×28) is significantly slower than editing all pyproject.toml
+    per project (x28) is significantly slower than editing all pyproject.toml
     files in one pass and running `uv lock` once afterward.
 
 Usage:
@@ -60,7 +60,7 @@ def _replace_specifier(req_str: str, target: str, new_specifier: str) -> str | N
     return result
 
 
-def _update_dep_list(dep_list, target: str, new_specifier: str) -> int:
+def _update_dep_list(dep_list: tomlkit.items.Array, target: str, new_specifier: str) -> int:
     """Mutate a tomlkit array in-place. Returns the number of replacements made."""
     count = 0
     for i, item in enumerate(dep_list):

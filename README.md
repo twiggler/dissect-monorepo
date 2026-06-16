@@ -11,7 +11,7 @@ template/                ← monorepo template (mirrors the target layout exactl
   .gitignore             ← monorepo-wide ignore rules (consolidates per-project .gitignore files)
   Justfile               ← task runner recipes (test, release, bump, …)
   pyproject.toml         ← workspace config and shared tool settings
-  ruff.toml              ← linter/formatter config
+  ruff.template.toml     ← linter/formatter config (renamed to ruff.toml on installation)
 doc/                     ← design documentation
 migrate/                 ← one-time migration pipeline (build monorepo from upstream)
   install_config.sh      ← copies template/ into a target monorepo checkout

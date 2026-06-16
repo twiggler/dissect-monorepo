@@ -21,10 +21,10 @@ fi
 echo "Installing config into: $TARGET_DIR"
 
 mkdir -p "$TARGET_DIR/projects"
-cp "$CONFIG_DIR/pyproject.toml" "$TARGET_DIR/pyproject.toml"
-cp "$CONFIG_DIR/ruff.toml"      "$TARGET_DIR/ruff.toml"
-cp "$CONFIG_DIR/Justfile"       "$TARGET_DIR/Justfile"
-cp "$CONFIG_DIR/.gitignore"     "$TARGET_DIR/.gitignore"
+cp "$CONFIG_DIR/pyproject.toml"     "$TARGET_DIR/pyproject.toml"
+cp "$CONFIG_DIR/ruff.template.toml" "$TARGET_DIR/ruff.toml"   # Use a different name to avoid conflicts with project-level ruff.toml files.
+cp "$CONFIG_DIR/Justfile"           "$TARGET_DIR/Justfile"
+cp "$CONFIG_DIR/.gitignore"         "$TARGET_DIR/.gitignore"
 rm -rf "$TARGET_DIR/.github" "$TARGET_DIR/.monorepo" "$TARGET_DIR/doc"
 rsync -r --exclude='__pycache__' "$CONFIG_DIR/.github/"   "$TARGET_DIR/.github/"
 rsync -r --exclude='__pycache__' "$CONFIG_DIR/.monorepo/" "$TARGET_DIR/.monorepo/"

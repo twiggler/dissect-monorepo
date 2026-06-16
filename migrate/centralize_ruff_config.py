@@ -12,7 +12,7 @@ import tomlkit
 REPO_ROOT = Path(__file__).parent.parent  # monorepo-scripts repo root
 PROJECTS_DIR = Path("projects")  # target repo (cwd)
 ROOT_TOML = Path("pyproject.toml")  # target repo (cwd)
-RUFF_CONFIG_FILE = REPO_ROOT / "template/ruff.toml"
+RUFF_CONFIG_FILE = REPO_ROOT / "template/ruff.template.toml"
 # ---------------------
 
 

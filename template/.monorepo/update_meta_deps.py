@@ -26,7 +26,6 @@ import tomlkit
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
-
 META_TOML = Path("projects/dissect/pyproject.toml")
 
 
@@ -75,4 +74,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

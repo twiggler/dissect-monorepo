@@ -37,8 +37,7 @@ WORKSPACE_ROOT = Path(__file__).parent.parent
 
 def load_config() -> dict:
     pyproject = WORKSPACE_ROOT / "pyproject.toml"
-    with open(pyproject, "rb") as fh:
-        data = tomllib.load(fh)
+    data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
     return data["tool"]["monorepo"]["test"]
 
 
@@ -51,7 +50,7 @@ def version_to_cibw_id(version: str) -> str:
         "pypy3.11"  -> "pp311-*"
     """
     if version.startswith("pypy"):
-        numeric = version[len("pypy"):].replace(".", "")
+        numeric = version[len("pypy") :].replace(".", "")
         return f"pp{numeric}-*"
     return f"cp{version.replace('.', '')}-*"
 
