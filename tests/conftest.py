@@ -49,7 +49,7 @@ def monorepo(monorepo_source, tmp_path):
     """
     dest = tmp_path / "monorepo"
     subprocess.run(
-        ["git", "clone", "--local", str(monorepo_source), str(dest)],
+        ["git", "clone", "--no-hardlinks", str(monorepo_source), str(dest)],
         check=True,
         capture_output=True,
     )
