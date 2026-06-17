@@ -7,6 +7,8 @@ whose current version has no matching git tag (``<name>/<version>``).
 import subprocess
 import tomllib
 
+import tomlkit
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -84,3 +86,42 @@ def test_table_output_shows_tagged_and_pending(monorepo):
     assert result.returncode == 0, result.stderr
     assert "tagged" in result.stdout
     assert "pending" in result.stdout
+
+
+def test_tagged_with_alternate_patch_form(monorepo):
+    """A package tagged as M.m.0 is not pending when pyproject.toml records M.m, and vice versa."""
+    _clear_tags(monorepo)
+    name = "dissect.util"
+    toml_path = monorepo / "projects" / name / "pyproject.toml"
+    original_text = toml_path.read_text()
+    original_version = _version(monorepo, name)
+
+    # Case 1: store version as M.m, tag as M.m.0
+    doc = tomlkit.parse(original_text)
+    v = original_version.split(".")
+    short_ver = f"{v[0]}.{v[1]}"
+    long_ver = f"{v[0]}.{v[1]}.0"
+    doc["project"]["version"] = short_ver
+    toml_path.write_text(tomlkit.dumps(doc))
+    _add_tag(monorepo, name, long_ver)
+
+    result = _run_pending_releases(monorepo, "--names")
+    assert result.returncode == 0, result.stderr
+    assert name not in result.stdout.strip().splitlines(), (
+        f"Expected {name} to be recognised via alternate tag {name}/{long_ver}"
+    )
+
+    # Case 2: store version as M.m.0, tag as M.m
+    subprocess.run(["git", "tag", "-d", f"{name}/{long_ver}"], cwd=monorepo, check=True, capture_output=True)
+    doc["project"]["version"] = long_ver
+    toml_path.write_text(tomlkit.dumps(doc))
+    _add_tag(monorepo, name, short_ver)
+
+    result = _run_pending_releases(monorepo, "--names")
+    assert result.returncode == 0, result.stderr
+    assert name not in result.stdout.strip().splitlines(), (
+        f"Expected {name} to be recognised via alternate tag {name}/{short_ver}"
+    )
+
+    # Restore
+    toml_path.write_text(original_text)

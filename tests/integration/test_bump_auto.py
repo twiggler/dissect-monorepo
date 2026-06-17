@@ -72,7 +72,7 @@ def test_auto_bumps_package_with_new_commits(monorepo):
 
     new = _version(monorepo, name)
     assert _minor(new) == _minor(original) + 1
-    assert new.split(".")[2] == "0"
+    assert len(new.split(".")) == 2
 
 
 def test_auto_skips_package_without_new_commits(monorepo):
@@ -187,4 +187,4 @@ def test_pre_migration_commits_trigger_bump(tmp_path, bump_version_script):
     assert "dissect.util" in result.stdout
 
     version = tomllib.loads((pkg_dir / "pyproject.toml").read_text())["project"]["version"]
-    assert version == "1.1.0", f"Expected 1.1.0, got {version}"
+    assert version == "1.1", f"Expected 1.1, got {version}"

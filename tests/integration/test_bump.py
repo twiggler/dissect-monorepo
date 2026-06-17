@@ -60,7 +60,7 @@ def test_bump_increments_minor_version(monorepo):
     orig_minor = int(original.split(".")[1])
     new_parts = new.split(".")
     assert int(new_parts[1]) == orig_minor + 1
-    assert new_parts[2] == "0"
+    assert len(new_parts) == 2
 
 
 def test_double_bump_guard_rejects_untagged(monorepo):

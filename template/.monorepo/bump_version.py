@@ -49,9 +49,9 @@ def _read_workspace_packages() -> dict[str, tuple[Path, str, str]]:
 
 
 def _bump_minor(version: str) -> str:
-    # Always emit a 3-part version (major.minor.0), normalizing inputs like "3.4".
+    """Increment the minor component and return a 2-part version (major.minor)."""
     v = Version(version)
-    return f"{v.major}.{v.minor + 1}.0"
+    return f"{v.major}.{v.minor + 1}"
 
 
 def _tag_exists(tag: str) -> bool:
@@ -65,8 +65,25 @@ def _tag_exists(tag: str) -> bool:
     return bool(result.stdout.strip())
 
 
-def _has_release_tag(name: str, version: str) -> bool:
-    return _tag_exists(f"{name}/{version}")
+def _find_release_tag(name: str, version: str) -> str | None:
+    """Return the existing release tag for (name, version), or None if no tag exists.
+
+    When the patch component is zero, both the short form (M.m) and the long form
+    (M.m.0) are tried so that tags created under either convention are recognised.
+    Returns the matching tag string so callers can use it directly as a git ref.
+    """
+    primary = f"{name}/{version}"
+    if _tag_exists(primary):
+        return primary
+
+    v = Version(version)
+    if v.micro == 0:
+        alt_ver = f"{v.major}.{v.minor}.0" if len(v.release) == 2 else f"{v.major}.{v.minor}"
+        alt = f"{name}/{alt_ver}"
+        if _tag_exists(alt):
+            return alt
+
+    return None
 
 
 def _has_commits_since_tag(name: str, version: str, project_dir: Path) -> bool:
@@ -79,7 +96,7 @@ def _has_commits_since_tag(name: str, version: str, project_dir: Path) -> bool:
       2. Pre-migration: commits in the project's imported history that arrived
          via its merge commit (migration/start/<name>) but weren't yet released.
     """
-    release_tag = f"{name}/{version}"
+    release_tag = _find_release_tag(name, version) or f"{name}/{version}"
 
     # 1. Post-migration: new work after the migration window that hasn't been released.
     post_cmd = [
@@ -113,8 +130,8 @@ def cmd_pending_releases(args: argparse.Namespace) -> int:
     workspace = _read_workspace_packages()
     pending = []
     not_pending = []
-    for _project_dir, name, version in sorted(workspace.values(), key=lambda e: e[1]):
-        if _has_release_tag(name, version):
+    for _, name, version in sorted(workspace.values(), key=lambda e: e[1]):
+        if _find_release_tag(name, version) is not None:
             not_pending.append((name, version))
         else:
             pending.append((name, version))
@@ -139,7 +156,7 @@ def cmd_bump(args: argparse.Namespace) -> int:
         skipped_pending = []
 
         for project_dir, name, version in sorted(workspace.values(), key=lambda e: e[1]):
-            if not _has_release_tag(name, version):
+            if _find_release_tag(name, version) is None:
                 skipped_pending.append(name)
                 continue
             if not _has_commits_since_tag(name, version, project_dir):
@@ -167,7 +184,9 @@ def cmd_bump(args: argparse.Namespace) -> int:
                 print(f"error: unknown package {name!r}", file=sys.stderr)
             return 1
 
-        double_bumps = [name for name in targets if not _has_release_tag(name, workspace[canonicalize_name(name)][2])]
+        double_bumps = [
+            name for name in targets if _find_release_tag(name, workspace[canonicalize_name(name)][2]) is None
+        ]
         if double_bumps:
             print("error: the following packages have no release tag for their current version.", file=sys.stderr)
             print("Release them first, or create the tags manually.", file=sys.stderr)
