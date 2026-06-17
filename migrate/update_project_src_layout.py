@@ -11,21 +11,17 @@ import tomlkit
 
 Fixes are applied to every project:
 
-1. [build-system] requires — setuptools_scm is removed. All dissect
-   packages declare a static version in [project], so setuptools_scm is
-   never needed and only causes spurious git subprocess calls at build time.
-
-2. [build-system] backend-path — For projects using a custom local build
+1. [build-system] backend-path — For projects using a custom local build
    backend (build-backend = "_build"), the backend-path must point to the
    directory that contains _build.py.  In a src/ layout the correct value is
    e.g. "src/dissect/util" rather than "dissect/util".
 
-3. [tool.setuptools.packages.find] where — Without `where = ["src"]`,
+2. [tool.setuptools.packages.find] where — Without `where = ["src"]`,
    setuptools scans the project root and finds nothing, resulting in an empty
    editable-install finder.  This fix adds the missing directive so that
    packages installed in editable mode are discoverable at import time.
 
-4. [tool.pytest.ini_options] — pytest determines rootdir by walking upward
+3. [tool.pytest.ini_options] — pytest determines rootdir by walking upward
    from the test paths looking for a config file.  Without this table,
    pytest anchors rootdir to the monorepo root rather than the project
    directory, breaking tests that rely on rootdir (e.g. LFS tracking tests).
@@ -38,14 +34,14 @@ Project-specific fixes:
   the Argon2 password-hashing fallback works without building the native
   Rust extension.  This mirrors the `argon2-cffi` entry that was in tox.ini.
 
-5. [[tool.setuptools-rust.ext-modules]] path — For projects with a Rust
+4. [[tool.setuptools-rust.ext-modules]] path — For projects with a Rust
    extension, the Cargo.toml path is relative to the project root.  In a
    src/ layout the correct value is e.g.
    "src/dissect/util/_native.src/Cargo.toml" rather than
    "dissect/util/_native.src/Cargo.toml".  The old path is derived from
    the project name; the correct one is the actual location on disk.
 
-6. [tool.monorepo] native — Projects that declare a Rust extension via
+5. [tool.monorepo] native — Projects that declare a Rust extension via
    [[tool.setuptools-rust.ext-modules]] are marked with
    `[tool.monorepo] native = true` so that the build-native-inplace Just
    recipe and native_projects.py discovery script can find them.
@@ -67,7 +63,6 @@ def patch_pyproject(file_path: Path) -> None:
         doc = tomlkit.parse(f.read())
 
     changed = False
-    changed |= _fix_build_system_requires(doc)
     changed |= _fix_backend_path(doc, project_root)
     changed |= _fix_packages_find_where(doc, project_root)
     changed |= _fix_pytest_ini_options(doc, project_root)
@@ -79,24 +74,6 @@ def patch_pyproject(file_path: Path) -> None:
         with file_path.open("w", encoding="utf-8") as f:
             f.write(tomlkit.dumps(doc))
         print(f"  [✓] Updated {file_path}")
-
-
-def _fix_build_system_requires(doc: tomlkit.TOMLDocument) -> bool:
-    """Remove setuptools_scm from build-system.requires."""
-    requires = doc.get("build-system", {}).get("requires")
-    if requires is None:
-        print("  [-] build-system.requires: no build-system found, skipping.")
-        return False
-
-    indices = [i for i, r in enumerate(requires) if str(r).startswith("setuptools_scm")]
-    if not indices:
-        print("  [-] build-system.requires: setuptools_scm not present, skipping.")
-        return False
-
-    for i in reversed(indices):
-        requires.pop(i)
-    print("  [~] build-system.requires: removed setuptools_scm")
-    return True
 
 
 def _fix_backend_path(doc: tomlkit.TOMLDocument, project_root: Path) -> bool:

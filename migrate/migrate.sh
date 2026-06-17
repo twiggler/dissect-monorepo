@@ -15,8 +15,6 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     # Converts 'github.com:fox-it/dissect.apfs' to 'dissect.apfs'
     REPO_PATH="${line#*/}"
 
-    if [ -z "$REPO_PATH" ]; then continue; fi
-
     echo "----------------------------------------------------"
     echo "Migrating: $REPO_PATH"
     echo "----------------------------------------------------"

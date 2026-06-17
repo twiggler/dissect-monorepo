@@ -31,9 +31,9 @@ run() {
 echo "Running migrate.sh"
 run bash "$SCRIPT_DIR/migrate.sh"
 
-# 2. decouple_versions.sh (shell)
-echo "Running decouple_versions.sh"
-run bash "$SCRIPT_DIR/decouple_versions.sh"
+# 2. decouple_versions.py (python via uv)
+echo "Running decouple_versions.py"
+run uv run "$SCRIPT_DIR/decouple_versions.py"
 
 # 3. internal_deps.py (python via uv)
 echo "Running internal_deps.py"
