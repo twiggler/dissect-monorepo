@@ -9,14 +9,15 @@
 """Manage versions for workspace packages.
 
 Subcommands:
-    bump (all | auto | <package>...)
+    bump (auto | <package>...)
         Bump the minor version of the given packages.
-        'all' expands to every workspace member.
         'auto' bumps every package that both has a release tag for its current
         version AND has new commits in its project directory since that tag;
         pending packages (no release tag) are silently skipped.
         Refuses to bump any explicitly named package whose current version has
         no release tag — release pending packages first to avoid double-bumps.
+        Refuses to bump any explicitly named package that has no new commits
+        since its last release tag — there is nothing to release.
 
     pending-releases [--names]
         List packages whose current version has no matching git release tag
@@ -148,53 +149,67 @@ def cmd_pending_releases(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_bump(args: argparse.Namespace) -> int:
-    workspace = _read_workspace_packages()
+def _resolve_auto_targets(workspace: dict[str, tuple[Path, str, str]]) -> list[str] | int:
+    """Return the list of packages to bump automatically, or an int exit code."""
+    to_bump = []
+    skipped_pending = []
 
-    if args.packages == ["auto"]:
-        to_bump = []
-        skipped_pending = []
+    for project_dir, name, version in sorted(workspace.values(), key=lambda e: e[1]):
+        if _find_release_tag(name, version) is None:
+            skipped_pending.append(name)
+            continue
+        if not _has_commits_since_tag(name, version, project_dir):
+            continue
+        to_bump.append(name)
 
-        for project_dir, name, version in sorted(workspace.values(), key=lambda e: e[1]):
-            if _find_release_tag(name, version) is None:
-                skipped_pending.append(name)
-                continue
-            if not _has_commits_since_tag(name, version, project_dir):
-                continue
-            to_bump.append(name)
+    if skipped_pending:
+        print(f"[skip] {len(skipped_pending)} package(s) already bumped and awaiting release:")
+        for name in skipped_pending:
+            print(f"  {name}")
 
-        if skipped_pending:
-            print(f"[skip] {len(skipped_pending)} package(s) already bumped and awaiting release:")
-            for name in skipped_pending:
-                print(f"  {name}")
+    if not to_bump:
+        print("Nothing to auto-bump.")
+        return 0
 
-        if not to_bump:
-            print("Nothing to auto-bump.")
-            return 0
+    return to_bump
 
-        targets = to_bump
-    elif args.packages == ["all"]:
-        targets = [name for _dir, name, _ver in sorted(workspace.values(), key=lambda e: e[1])]
-    else:
-        targets = args.packages
 
-        unknown = [name for name in targets if canonicalize_name(name) not in workspace]
-        if unknown:
-            for name in unknown:
-                print(f"error: unknown package {name!r}", file=sys.stderr)
-            return 1
+def _resolve_explicit_targets(workspace: dict[str, tuple[Path, str, str]], packages: list[str]) -> list[str] | int:
+    """Validate and return the explicitly requested packages to bump, or an int exit code."""
+    unknown = [name for name in packages if canonicalize_name(name) not in workspace]
+    if unknown:
+        for name in unknown:
+            print(f"error: unknown package {name!r}", file=sys.stderr)
+        return 1
 
-        double_bumps = [
-            name for name in targets if _find_release_tag(name, workspace[canonicalize_name(name)][2]) is None
-        ]
-        if double_bumps:
-            print("error: the following packages have no release tag for their current version.", file=sys.stderr)
-            print("Release them first, or create the tags manually.", file=sys.stderr)
-            print(file=sys.stderr)
-            for name in double_bumps:
-                print(f"  {name}", file=sys.stderr)
-            return 1
+    double_bumps = [name for name in packages if _find_release_tag(name, workspace[canonicalize_name(name)][2]) is None]
+    if double_bumps:
+        print("error: the following packages have no release tag for their current version.", file=sys.stderr)
+        print("Release them first, or create the tags manually.", file=sys.stderr)
+        print(file=sys.stderr)
+        for name in double_bumps:
+            print(f"  {name}", file=sys.stderr)
+        return 1
 
+    no_new_commits = [
+        name
+        for name in packages
+        for project_dir, _, version in (workspace[canonicalize_name(name)],)
+        if not _has_commits_since_tag(name, version, project_dir)
+    ]
+    if no_new_commits:
+        print("error: the following packages have no new commits since their last release tag.", file=sys.stderr)
+        print("Nothing to release — bump is not needed.", file=sys.stderr)
+        print(file=sys.stderr)
+        for name in no_new_commits:
+            print(f"  {name}", file=sys.stderr)
+        return 1
+
+    return packages
+
+
+def _apply_bumps(workspace: dict[str, tuple[Path, str, str]], targets: list[str]) -> int:
+    """Write bumped versions to disk and report. Returns 0."""
     for name in targets:
         project_dir, declared_name, version = workspace[canonicalize_name(name)]
         toml_path = project_dir / "pyproject.toml"
@@ -206,6 +221,20 @@ def cmd_bump(args: argparse.Namespace) -> int:
 
     print(f"\nBumped {len(targets)} package(s).")
     return 0
+
+
+def cmd_bump(args: argparse.Namespace) -> int:
+    workspace = _read_workspace_packages()
+
+    if args.packages == ["auto"]:
+        result = _resolve_auto_targets(workspace)
+    else:
+        result = _resolve_explicit_targets(workspace, args.packages)
+
+    if isinstance(result, int):
+        return result
+
+    return _apply_bumps(workspace, result)
 
 
 def main() -> None:
@@ -233,10 +262,7 @@ def main() -> None:
         "packages",
         nargs="+",
         metavar="package",
-        help=(
-            "Package names, 'all' to bump every workspace member, or 'auto' to "
-            "bump packages with new commits since their last release tag."
-        ),
+        help=("Package names, or 'auto' to bump packages with new commits since their last release tag."),
     )
 
     args = parser.parse_args()

@@ -237,15 +237,14 @@ just release dissect.util dissect.cstruct
 just release all --index testpypi
 ```
 
-#### `just bump <packages|all|auto>`
+#### `just bump <packages|auto>`
 
-Bump the minor version of one or more workspace packages and regenerate `uv.lock`. Pass `all` to bump every workspace member, or `auto` to bump only packages that have new commits since their last release tag.
+Bump the minor version of one or more workspace packages and regenerate `uv.lock`. Pass `auto` to bump only packages that have new commits since their last release tag.
 
-**Guard**: when bumping named packages or `all`, refuses to bump any package whose current version has no release tag yet — release pending versions first to avoid double-bumps. `auto` silently skips pending packages instead of erroring.
+**Guards**: when bumping named packages, refuses to bump any package whose current version has no release tag yet — release pending versions first to avoid double-bumps. Also refuses to bump any package that has no new commits since its last release tag — there is nothing to release. `auto` silently skips both pending packages and packages without new commits instead of erroring.
 
 ```
 just bump dissect.util dissect.cstruct
-just bump all
 just bump auto
 ```
 
