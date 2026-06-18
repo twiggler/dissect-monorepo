@@ -10,8 +10,8 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
 TARGET_DIR=$(realpath -m "${1:-$SCRIPT_DIR/../dissect-monorepo}")
 
 echo "Target: $TARGET_DIR"
-if [[ -e "$TARGET_DIR" ]]; then
-  echo "Error: TARGET_DIR ($TARGET_DIR) already exists. Remove it manually before running." >&2
+if [[ -n "$(find "$TARGET_DIR" -maxdepth 1 -mindepth 1 -print -quit 2>/dev/null)" ]]; then
+  echo "Error: TARGET_DIR ($TARGET_DIR) already exists and is not empty. Remove it manually before running." >&2
   exit 1
 fi
 mkdir -p "$TARGET_DIR"

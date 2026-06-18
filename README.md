@@ -48,6 +48,49 @@ Defaults to `../dissect-monorepo` if no target is given.
 migrate/run_pipeline.sh [TARGET_DIR]
 ```
 
+### Build a fresh monorepo using Docker or Podman
+
+The migration has several system-level dependencies (`git`, `git-lfs`, `git-filter-repo`, `uv`).
+A Dockerfile is provided to run the pipeline in an isolated environment.
+
+**Build the image:**
+
+```sh
+docker build -t dissect-migration .
+```
+
+**Run the migration** — create the output directory first, then mount it to `/output`:
+
+```sh
+mkdir /tmp/dissect-monorepo-test
+docker run --rm \
+  -v /tmp/dissect-monorepo-test:/output \
+  -e GIT_USER_NAME="Your Name" \
+  -e GIT_USER_EMAIL="you@example.com" \
+  dissect-migration
+```
+
+**Using Podman** — the flags are identical, replace `docker` with `podman`:
+
+```sh
+podman build -t dissect-migration .
+
+mkdir /tmp/dissect-monorepo-test
+podman run --rm \
+  -v /tmp/dissect-monorepo-test:/output:Z \
+  -e GIT_USER_NAME="Your Name" \
+  -e GIT_USER_EMAIL="you@example.com" \
+  dissect-migration
+```
+
+The `:Z` suffix relabels the directory for SELinux, which is required on Fedora/RHEL.
+
+Using `/tmp` (typically tmpfs on Linux) keeps heavy git-history rewriting off the SSD. The
+mounted directory must be empty.
+
+> **Network access required.** The container clones ~30 repositories from GitHub and resolves
+> packages from PyPI.
+
 ### Run the unit tests
 
 ```sh
