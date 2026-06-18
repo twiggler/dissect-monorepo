@@ -20,17 +20,18 @@ Introducing automated version bumping is therefore **out of scope for this migra
 
 **Why tags do not trigger releases in the monorepo**: restoring the tag-as-trigger model would require CI to write the version back into `pyproject.toml` (and regenerate `uv.lock`) and push that commit to `master`. This creates several compounding problems: CI needs write access and the push must bypass branch protection rules; the machine-generated commit appears in `git log` and `git blame`; pushing 10 release tags simultaneously fires 10 independent concurrent workflows with no coordination between them; and any failure mid-way leaves `pyproject.toml` out of sync with the published state. The `workflow_dispatch` trigger avoids all of this — it provides the same explicit "I am intentionally releasing now" signal, while leaving version management in the developer's hands and keeping CI read-only with respect to the repository.
 
-`just bump-minor` and `just bump-patch` recipes will handle the mechanical part — they increment the `version` field in the `pyproject.toml` of one or more projects and are usable for both single and bulk bumps:
+`just bump` and `just bump-patch` recipes will handle the mechanical part — they increment the `version` field in the `pyproject.toml` of one or more projects:
 
 ```
-just bump-minor dissect.util dissect.cstruct   # bump specific packages
-just bump-minor                                 # bump all workspace members
-just bump-patch dissect.util                    # patch bump a single package
+just bump dissect.util dissect.cstruct      # minor bump of specific packages
+just bump auto                              # minor bump all packages with new commits
+just bump-patch dissect.util               # patch bump a single package
+just bump-patch dissect.util dissect.cstruct  # patch bump specific packages
 ```
 
-Both recipes run `uv lock` after editing `pyproject.toml` files so the workspace lockfile stays consistent.
+`just bump` and `just bump auto` always bump the **minor** component (and reset patch to zero). `just bump-patch` increments only the **patch** component and does not support `auto` — patch bumps always require explicit package names. Both recipes run `uv lock` after editing `pyproject.toml` files so the workspace lockfile stays consistent.
 
-**Preventing double-bumps**: a developer who bumps a version but does not immediately publish creates an invisible pending state — a second developer (or the same one, later) may bump again without realising the first bump has not been released yet. Both `bump-minor` and `bump-patch` enforce this guard by **reusing the same pending-releases check** used by `just release`: before making any changes, they call into the pending-releases logic to determine whether the current local version of each target package already has a corresponding release tag. If no tag exists, the version has never been released and the recipe aborts with an error. The developer is prompted to either release the pending version first or explicitly bundle the new work under it. Version bumps should only be committed together with the feature or fix that motivates them, not as speculative pre-bumps.
+**Preventing double-bumps**: a developer who bumps a version but does not immediately publish creates an invisible pending state — a second developer (or the same one, later) may bump again without realising the first bump has not been released yet. Both `bump` and `bump-patch` enforce this guard by **reusing the same pending-releases check** used by `just release`: before making any changes, they call into the pending-releases logic to determine whether the current local version of each target package already has a corresponding release tag. If no tag exists, the version has never been released and the recipe aborts with an error. The developer is prompted to either release the pending version first or explicitly bundle the new work under it. Version bumps should only be committed together with the feature or fix that motivates them, not as speculative pre-bumps.
 
 ---
 
@@ -61,7 +62,7 @@ A corresponding `just release` recipe would: (1) run `pending-releases.py` to en
 
 **Non-authoritative by design**: the tag-based check assumes that `just release` is the only publication path. If a package is published manually without going through the recipe (and thus without creating a tag), it will appear pending again and `uv publish` will return a 409 conflict — a visible, recoverable error. The fix is to create the missing tag manually. This is acceptable because manual out-of-band publishing is not part of normal workflow.
 
-This same logic is reused by `just bump-minor` and `just bump-patch` as the double-bump guard (see Decision 1).
+This same logic is reused by `just bump` and `just bump-patch` as the double-bump guard (see Decision 1).
 
 The recipe accepts an optional space-separated list of package names to restrict the release to a subset:
 

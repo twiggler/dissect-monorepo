@@ -10,6 +10,8 @@ Verifies that just bump-auto:
 import subprocess
 import tomllib
 
+import helpers
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -24,35 +26,13 @@ def _run_bump_auto(monorepo):
     )
 
 
-def _version(monorepo, name):
-    path = monorepo / "projects" / name / "pyproject.toml"
-    return tomllib.loads(path.read_text())["project"]["version"]
-
-
 def _minor(version: str) -> int:
     return int(version.split(".")[1])
 
 
-def _add_tag(monorepo, name, version):
-    subprocess.run(["git", "tag", f"{name}/{version}"], cwd=monorepo, check=True, capture_output=True)
-
-
-def _add_commit(monorepo, project_name, message="ci: test commit"):
-    """Touch a file inside the project directory and commit it."""
-    marker = monorepo / "projects" / project_name / ".auto-bump-test"
-    marker.touch()
-    subprocess.run(
-        ["git", "add", str(marker)],
-        cwd=monorepo,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", message],
-        cwd=monorepo,
-        check=True,
-        capture_output=True,
-    )
+_version = helpers.version
+_add_tag = helpers.add_tag
+_add_commit = helpers.add_commit
 
 
 # ---------------------------------------------------------------------------
@@ -126,8 +106,6 @@ def test_auto_migration_commits_do_not_trigger_bump(monorepo):
     """
     # Tag every package at its current version (simulating post-migration releases).
     for toml_path in sorted((monorepo / "projects").glob("*/pyproject.toml")):
-        import tomllib
-
         data = tomllib.loads(toml_path.read_text())
         name = data["project"]["name"]
         version = data["project"]["version"]

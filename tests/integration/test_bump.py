@@ -10,7 +10,8 @@ Verifies that just bump:
 """
 
 import subprocess
-import tomllib
+
+import helpers
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -26,26 +27,9 @@ def _run_bump(monorepo, *packages):
     )
 
 
-def _version(monorepo, name):
-    path = monorepo / "projects" / name / "pyproject.toml"
-    return tomllib.loads(path.read_text())["project"]["version"]
-
-
-def _add_tag(monorepo, name, version):
-    subprocess.run(["git", "tag", f"{name}/{version}"], cwd=monorepo, check=True, capture_output=True)
-
-
-def _add_commit(monorepo, project_name, message="ci: test commit"):
-    """Touch a file inside the project directory and commit it."""
-    marker = monorepo / "projects" / project_name / ".bump-test"
-    marker.touch()
-    subprocess.run(["git", "add", str(marker)], cwd=monorepo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", message],
-        cwd=monorepo,
-        check=True,
-        capture_output=True,
-    )
+_version = helpers.version
+_add_tag = helpers.add_tag
+_add_commit = helpers.add_commit
 
 
 # ---------------------------------------------------------------------------

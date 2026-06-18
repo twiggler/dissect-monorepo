@@ -9,8 +9,11 @@
 """Manage versions for workspace packages.
 
 Subcommands:
-    bump (auto | <package>...)
-        Bump the minor version of the given packages.
+    bump [--patch] (auto | <package>...)
+        Bump the version of the given packages.
+        Without --patch, bumps the minor component and resets patch (default).
+        With --patch, increments the patch component only; 'auto' is not
+        supported with --patch.
         'auto' bumps every package that both has a release tag for its current
         version AND has new commits in its project directory since that tag;
         pending packages (no release tag) are silently skipped.
@@ -53,6 +56,12 @@ def _bump_minor(version: str) -> str:
     """Increment the minor component and return a 2-part version (major.minor)."""
     v = Version(version)
     return f"{v.major}.{v.minor + 1}"
+
+
+def _bump_patch(version: str) -> str:
+    """Increment the patch component and return a 3-part version (major.minor.patch)."""
+    v = Version(version)
+    return f"{v.major}.{v.minor}.{v.micro + 1}"
 
 
 def _tag_exists(tag: str) -> bool:
@@ -208,13 +217,13 @@ def _resolve_explicit_targets(workspace: dict[str, tuple[Path, str, str]], packa
     return packages
 
 
-def _apply_bumps(workspace: dict[str, tuple[Path, str, str]], targets: list[str]) -> int:
+def _apply_bumps(workspace: dict[str, tuple[Path, str, str]], targets: list[str], patch: bool = False) -> int:
     """Write bumped versions to disk and report. Returns 0."""
     for name in targets:
         project_dir, declared_name, version = workspace[canonicalize_name(name)]
         toml_path = project_dir / "pyproject.toml"
         doc = tomlkit.parse(toml_path.read_text())
-        new_version = _bump_minor(version)
+        new_version = _bump_patch(version) if patch else _bump_minor(version)
         doc["project"]["version"] = new_version
         toml_path.write_text(tomlkit.dumps(doc))
         print(f"  {declared_name}: {version} → {new_version}")
@@ -227,6 +236,9 @@ def cmd_bump(args: argparse.Namespace) -> int:
     workspace = _read_workspace_packages()
 
     if args.packages == ["auto"]:
+        if args.patch:
+            print("error: --patch cannot be used with 'auto'; auto always bumps minor.", file=sys.stderr)
+            return 1
         result = _resolve_auto_targets(workspace)
     else:
         result = _resolve_explicit_targets(workspace, args.packages)
@@ -234,7 +246,7 @@ def cmd_bump(args: argparse.Namespace) -> int:
     if isinstance(result, int):
         return result
 
-    return _apply_bumps(workspace, result)
+    return _apply_bumps(workspace, result, patch=args.patch)
 
 
 def main() -> None:
@@ -256,13 +268,21 @@ def main() -> None:
 
     bump_parser = subparsers.add_parser(
         "bump",
-        help="Bump the minor version of workspace packages.",
+        help="Bump the version of workspace packages.",
+    )
+    bump_parser.add_argument(
+        "--patch",
+        action="store_true",
+        default=False,
+        help="Increment the patch component instead of the minor component. Not compatible with 'auto'.",
     )
     bump_parser.add_argument(
         "packages",
         nargs="+",
         metavar="package",
-        help=("Package names, or 'auto' to bump packages with new commits since their last release tag."),
+        help=(
+            "Package names, or 'auto' to bump minor version of packages with new commits since their last release tag."
+        ),
     )
 
     args = parser.parse_args()

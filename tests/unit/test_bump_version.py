@@ -68,3 +68,25 @@ def test_find_release_tag_nonzero_patch_no_alt():
     """Non-zero patch — no alternate form is tried; returns None when primary missing."""
     with patch.object(bv, "_tag_exists", return_value=False):
         assert bv._find_release_tag("pkg", "1.23.4") is None
+
+
+# ---------------------------------------------------------------------------
+# _bump_patch
+# ---------------------------------------------------------------------------
+
+
+def test_bump_patch_three_components():
+    assert bv._bump_patch("3.5.2") == "3.5.3"
+
+
+def test_bump_patch_three_components_at_zero():
+    assert bv._bump_patch("3.5.0") == "3.5.1"
+
+
+def test_bump_patch_two_components():
+    """2-part version (no patch) is treated as micro=0; result is always 3-part."""
+    assert bv._bump_patch("3.5") == "3.5.1"
+
+
+def test_bump_patch_large_patch():
+    assert bv._bump_patch("1.2.99") == "1.2.100"

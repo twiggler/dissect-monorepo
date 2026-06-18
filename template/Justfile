@@ -55,6 +55,16 @@ bump +packages:
     uv run --python "{{tooling_python}}" .monorepo/bump_version.py bump {{packages}}
     uv lock
 
+# Bump the patch version of one or more workspace packages.
+# 'auto' is not supported — patch bumps always require explicit package names.
+# Subject to the same guards as 'just bump': refuses to bump packages with no
+# release tag (double-bump guard) or no new commits since the last release tag.
+# Example: just bump-patch dissect.util
+# Example: just bump-patch dissect.util dissect.cstruct
+bump-patch +packages:
+    uv run --python "{{tooling_python}}" .monorepo/bump_version.py bump --patch {{packages}}
+    uv lock
+
 # Regenerate the dissect meta-package dependency list from current workspace versions.
 update-meta:
     uv run --python "{{tooling_python}}" .monorepo/update_meta_deps.py
