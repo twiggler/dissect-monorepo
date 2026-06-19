@@ -48,12 +48,7 @@ fi
 # Expand "all"
 # ---------------------------------------------------------------------------
 if [[ "${raw_packages[*]}" == "all" ]]; then
-    mapfile -t requested < <(
-        for f in projects/*/pyproject.toml; do
-            [[ "$f" == *"/template/"* ]] && continue
-            grep '^name = ' "$f" | sed 's/name = "\(.*\)"/\1/'
-        done
-    )
+    mapfile -t requested < <(uv run --python "$TOOLING_PYTHON" .monorepo/bump_version.py list-packages)
 else
     requested=("${raw_packages[@]}")
 fi
@@ -113,12 +108,8 @@ echo
 # Collect name/version for each package (needed for tagging)
 # ---------------------------------------------------------------------------
 declare -A versions
-for f in projects/*/pyproject.toml; do
-    [[ "$f" == *"/template/"* ]] && continue
-    name=$(grep -m1 '^name\s*=' "$f" | sed 's/name\s*=\s*"\(.*\)"/\1/')
-    version=$(grep -m1 '^version\s*=' "$f" | sed 's/version\s*=\s*"\(.*\)"/\1/')
-    [[ -n "$name" && -n "$version" ]] && versions["$name"]="$version"
-done
+while IFS=' ' read -r name ver; do versions["$name"]="$ver"; done \
+    < <(uv run --python "$TOOLING_PYTHON" .monorepo/bump_version.py package-version "${to_release[@]}")
 
 # ---------------------------------------------------------------------------
 # Publish phase

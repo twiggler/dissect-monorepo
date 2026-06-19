@@ -25,6 +25,14 @@ Subcommands:
     pending-releases [--names]
         List packages whose current version has no matching git release tag
         (<name>/<version>). With --names, print only package names, one per line.
+
+    list-packages
+        Print the declared name of every workspace package, one per line,
+        sorted alphabetically.
+
+    package-version <package> [<package> ...]
+        Print "<name> <version>" for each requested package, in the order
+        given. Exits 1 if any name is unknown.
 """
 
 import argparse
@@ -158,6 +166,26 @@ def cmd_pending_releases(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_list_packages(args: argparse.Namespace) -> int:
+    workspace = _read_workspace_packages()
+    for _, name, _ in sorted(workspace.values(), key=lambda e: e[1]):
+        print(name)
+    return 0
+
+
+def cmd_package_version(args: argparse.Namespace) -> int:
+    workspace = _read_workspace_packages()
+    unknown = [p for p in args.packages if canonicalize_name(p) not in workspace]
+    if unknown:
+        for p in unknown:
+            print(f"error: unknown package {p!r}", file=sys.stderr)
+        return 1
+    for p in args.packages:
+        _, name, version = workspace[canonicalize_name(p)]
+        print(f"{name} {version}")
+    return 0
+
+
 def _resolve_auto_targets(workspace: dict[str, tuple[Path, str, str]]) -> list[str] | int:
     """Return the list of packages to bump automatically, or an int exit code."""
     to_bump = []
@@ -266,6 +294,22 @@ def main() -> None:
         help="Print only package names, one per line.",
     )
 
+    subparsers.add_parser(
+        "list-packages",
+        help="Print all workspace package names, one per line.",
+    )
+
+    package_version_parser = subparsers.add_parser(
+        "package-version",
+        help='Print "<name> <version>" for one or more workspace packages.',
+    )
+    package_version_parser.add_argument(
+        "packages",
+        nargs="+",
+        metavar="package",
+        help="Package names to look up.",
+    )
+
     bump_parser = subparsers.add_parser(
         "bump",
         help="Bump the version of workspace packages.",
@@ -288,6 +332,10 @@ def main() -> None:
     args = parser.parse_args()
     if args.command == "pending-releases":
         sys.exit(cmd_pending_releases(args))
+    elif args.command == "list-packages":
+        sys.exit(cmd_list_packages(args))
+    elif args.command == "package-version":
+        sys.exit(cmd_package_version(args))
     elif args.command == "bump":
         sys.exit(cmd_bump(args))
 
