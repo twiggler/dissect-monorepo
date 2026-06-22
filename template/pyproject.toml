@@ -11,6 +11,7 @@ dev = ["ruff==0.13.1", "vermin>=1.6.0", "pytest>=8.4.0", "pytest-xdist>=3", "typ
 docs = ["sphinx>=8,<9", "sphinx-autoapi", "sphinx_argparse_cli", "furo"]
 
 [tool.monorepo.test]
+# Pin full versions (e.g. "3.12.13") for full hermeticity.
 python-versions = ["3.10", "3.11", "3.12", "3.13", "pypy3.11"]
 os = ["ubuntu-latest", "windows-latest"]
 
@@ -48,6 +49,7 @@ before-all = "rustup target add i686-pc-windows-msvc"  # only needed for x86; no
 
 [tool.uv]
 python-downloads = "automatic"
+python-preference = "only-managed"
 
 [tool.uv.workspace]
 members = ["projects/*"]
