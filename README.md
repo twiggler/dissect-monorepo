@@ -30,7 +30,8 @@ tests/unit/              ← unit tests for the scripts in template/.monorepo/
 monorepo root. A file at `template/.monorepo/affected_tests.py` lands at
 `.monorepo/affected_tests.py` in the target. This 1-to-1 mapping means you edit
 files in their deployed location — there is no separate "source vs. installed"
-distinction within `template/`.
+distinction within `template/`. The one exception is `ruff.template.toml`, which is
+installed as `ruff.toml`.
 
 ## Quickstart
 
@@ -44,14 +45,16 @@ Defaults to `../dissect-monorepo` if no target is given.
 
 ### Build a fresh monorepo from scratch
 
+Requires `git`, `git-lfs`, `git-filter-repo`, and `uv` to be installed on the host.
+To avoid installing these dependencies locally, use the [Docker or Podman workflow](#build-a-fresh-monorepo-using-docker-or-podman) instead.
+
 ```sh
 migrate/run_pipeline.sh [TARGET_DIR]
 ```
 
 ### Build a fresh monorepo using Docker or Podman
 
-The migration has several system-level dependencies (`git`, `git-lfs`, `git-filter-repo`, `uv`).
-A Dockerfile is provided to run the pipeline in an isolated environment.
+A Dockerfile is provided to run the pipeline in an isolated environment, without needing to install the system dependencies locally.
 
 **Build the image:**
 
@@ -65,8 +68,8 @@ docker build -t dissect-migration .
 mkdir /tmp/dissect-monorepo-test
 docker run --rm \
   -v /tmp/dissect-monorepo-test:/output \
-  -e GIT_USER_NAME="Your Name" \
-  -e GIT_USER_EMAIL="you@example.com" \
+  -e GIT_USER_NAME="$(git config user.name)" \
+  -e GIT_USER_EMAIL="$(git config user.email)" \
   dissect-migration
 ```
 
@@ -78,8 +81,8 @@ podman build -t dissect-migration .
 mkdir /tmp/dissect-monorepo-test
 podman run --rm \
   -v /tmp/dissect-monorepo-test:/output:Z \
-  -e GIT_USER_NAME="Your Name" \
-  -e GIT_USER_EMAIL="you@example.com" \
+  -e GIT_USER_NAME="$(git config user.name)" \
+  -e GIT_USER_EMAIL="$(git config user.email)" \
   dissect-migration
 ```
 
