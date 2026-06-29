@@ -36,4 +36,4 @@ jobs:
           git config --global user.name "GitHub Actions"
 
       - name: Run integration tests
-        run: uv run --group dev pytest tests/integration -v
+        run: uv run --group dev pytest template/.monorepo/tests/integration -v

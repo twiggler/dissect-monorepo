@@ -7,17 +7,15 @@ from pathlib import Path
 
 import pytest
 
-SCRIPTS_DIR = Path(__file__).parent.parent
+
+@pytest.fixture(scope="session")
+def bump_version_script(request):
+    """Path to bump_version.py — lives at the pytest rootdir (.monorepo/)."""
+    return Path(request.config.rootdir) / "bump_version.py"
 
 
 @pytest.fixture(scope="session")
-def bump_version_script():
-    """Path to bump_version.py in the template."""
-    return SCRIPTS_DIR / "template" / ".monorepo" / "bump_version.py"
-
-
-@pytest.fixture(scope="session")
-def monorepo_source(tmp_path_factory):
+def monorepo_source(tmp_path_factory, request):
     """Session-scoped fixture providing a built monorepo directory.
 
     Reuses the directory pointed to by MONOREPO_FIXTURE for fast local
@@ -28,38 +26,37 @@ def monorepo_source(tmp_path_factory):
     src = os.environ.get("MONOREPO_FIXTURE")
     if src:
         return Path(src)
+
     # migrate/run_pipeline.sh refuses if the target already exists, so pass a path
     # inside the base temp dir that has not been created yet.
+    scripts_dir = Path(request.config.rootdir).parent.parent
     target = tmp_path_factory.getbasetemp() / "monorepo-source"
     subprocess.run(
         ["bash", "migrate/run_pipeline.sh", str(target)],
         check=True,
-        cwd=SCRIPTS_DIR,
+        cwd=scripts_dir,
     )
     return target
 
 
 @pytest.fixture
 def monorepo(monorepo_source, tmp_path):
-    """Function-scoped fixture providing a writable copy of the monorepo.
+    """Function-scoped fixture providing a writable copy of the monorepo."""
 
-    Uses ``git clone --local`` so that git objects are hardlinked rather than
-    copied, keeping per-test disk cost near zero regardless of repository size.
-    LFS objects are not cloned — tests don't require binary content.
-    """
     dest = tmp_path / "monorepo"
-    subprocess.run(
-        ["git", "clone", "--no-hardlinks", str(monorepo_source), str(dest)],
-        check=True,
-        capture_output=True,
-    )
-    # Remove historical release tags so tests can create them without conflicts.
+
+    # 1. Copy the repository state exactly as it exists
+    shutil.copytree(monorepo_source, dest)
+
+    # 2. Remove historical release tags so tests can create them without conflicts.
     # Migration tags (migration/start/*, migration/end) are preserved because
     # several tests rely on them for bump-auto logic.
     all_tags = subprocess.run(
         ["git", "tag", "-l"], cwd=dest, check=True, capture_output=True, text=True
     ).stdout.splitlines()
+
     release_tags = [t for t in all_tags if not t.startswith("migration/")]
+
     if release_tags:
         subprocess.run(
             ["git", "tag", "-d", *release_tags],
@@ -67,5 +64,8 @@ def monorepo(monorepo_source, tmp_path):
             check=True,
             capture_output=True,
         )
+
     yield dest
+
+    # 3. Cleanup
     shutil.rmtree(dest, ignore_errors=True)

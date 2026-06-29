@@ -1,0 +1,41 @@
+name: Tooling integration tests
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.monorepo/**'
+      - 'pyproject.toml'
+      - 'uv.lock'                                       
+      - 'Justfile'                                      
+      - '.github/workflows/tooling-integration-tests.yml'
+  pull_request:
+    paths:
+      - '.monorepo/**'
+      - 'pyproject.toml'
+      - 'uv.lock'                                       
+      - 'Justfile'                                      
+      - '.github/workflows/tooling-integration-tests.yml'
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  integration-tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      MONOREPO_FIXTURE: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+            fetch-depth: 0          # Get all commits and tags for integration tests
+            filter: 'blob:none'     # SKIP downloading historical file contents
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57
+        with:
+          python-version: "3.12"
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3
+      - name: Configure git identity
+        run: |
+          git config --global user.email "ci@github-actions"
+          git config --global user.name "GitHub Actions"
+      - run: just test-tooling-integration -v

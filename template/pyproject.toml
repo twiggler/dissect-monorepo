@@ -7,7 +7,7 @@ requires-python = ">=3.10"
 dependencies = []
 
 [dependency-groups]
-dev = ["ruff==0.13.1", "vermin>=1.6.0", "pytest>=8.4.0", "pytest-xdist>=3", "typing_extensions"]
+dev = ["ruff==0.13.1", "vermin>=1.6.0", "pytest>=8.4.0", "pytest-xdist>=3", "typing_extensions", "packaging>=24", "tomlkit>=0.13"]
 docs = ["sphinx>=8,<9", "sphinx-autoapi", "sphinx_argparse_cli", "furo"]
 
 [tool.monorepo.test]

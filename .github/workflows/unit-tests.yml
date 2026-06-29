@@ -25,4 +25,4 @@ jobs:
         with:
           python-version: "3.12"
 
-      - run: uv run --group dev pytest tests/unit -v
+      - run: uv run --group dev pytest template/.monorepo/tests/unit -v

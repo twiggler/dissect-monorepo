@@ -92,6 +92,43 @@ lint:
 fix:
     just ruff true
 
+# Run all tooling scripts tests (unit and integration)
+# Example: just test-tooling -v
+test-tooling *flags:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export MONOREPO_FIXTURE="${MONOREPO_FIXTURE:-.}"
+    uv run --group dev --python "{{tooling_python}}" pytest .monorepo/tests/ {{flags}}
+
+# Run tooling unit tests
+# Example: just test-tooling-unit -x
+test-tooling-unit *flags:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export MONOREPO_FIXTURE="${MONOREPO_FIXTURE:-.}"
+    uv run --group dev --python "{{tooling_python}}" pytest .monorepo/tests/unit {{flags}}
+
+# Run tooling integration tests
+# Example: just test-tooling-integration -k "test_bump"
+test-tooling-integration *flags:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export MONOREPO_FIXTURE="${MONOREPO_FIXTURE:-.}"
+    uv run --group dev --python "{{tooling_python}}" pytest .monorepo/tests/integration {{flags}}
+
+# Run ruff check+format over the monorepo tooling scripts.
+# Pass fix="true" to auto-fix instead of reporting.
+lint-tooling fix="false":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "{{fix}}" = "true" ]; then
+        uv run --group dev --python "{{tooling_python}}" ruff check --fix .monorepo
+        uv run --group dev --python "{{tooling_python}}" ruff format .monorepo
+    else
+        uv run --group dev --python "{{tooling_python}}" ruff check .monorepo
+        uv run --group dev --python "{{tooling_python}}" ruff format --check .monorepo
+    fi
+
 # Build the Sphinx API-reference docs for every project that has a tests/_docs/
 # directory and fail if sphinx-build emits any warnings.
 # All workspace packages are installed as editable so autoapi can resolve imports

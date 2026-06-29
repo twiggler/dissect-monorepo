@@ -8,11 +8,13 @@ Scripts and configuration for building and maintaining the [dissect](https://git
 template/                ← monorepo template (mirrors the target layout exactly)
   .github/workflows/     ← CI workflows deployed to the monorepo
   .monorepo/             ← operational scripts deployed to the monorepo
+    tests/unit/          ← unit tests for the scripts in .monorepo/
+    tests/integration/   ← integration tests for the monorepo tooling
   .gitignore             ← monorepo-wide ignore rules (consolidates per-project .gitignore files)
   Justfile               ← task runner recipes (test, release, bump, …)
   pyproject.toml         ← workspace config and shared tool settings
   ruff.template.toml     ← linter/formatter config (renamed to ruff.toml on installation)
-doc/                     ← design documentation
+  doc/                   ← design documentation
 migrate/                 ← one-time migration pipeline (build monorepo from upstream)
   install_config.sh      ← copies template/ into a target monorepo checkout
   run_pipeline.sh        ← builds a fresh monorepo from the upstream sources
@@ -23,7 +25,6 @@ migrate/                 ← one-time migration pipeline (build monorepo from up
   centralize_deps.py     ← centralises shared dependencies
   centralize_ruff_config.py ← centralises ruff configuration
   update_project_src_layout.py ← normalises src layout across projects
-tests/unit/              ← unit tests for the scripts in template/.monorepo/
 ```
 
 `template/` is a verbatim mirror of what `migrate/install_config.sh` deploys to the target
@@ -97,7 +98,7 @@ mounted directory must be empty.
 ### Run the unit tests
 
 ```sh
-uv run --group dev pytest tests/unit
+uv run --group dev pytest template/.monorepo/tests/unit
 ```
 
 ### Run the integration tests locally
@@ -106,21 +107,21 @@ Point `MONOREPO_FIXTURE` at an already-built monorepo to skip the ~3-minute
 `migrate/run_pipeline.sh` build step:
 
 ```sh
-MONOREPO_FIXTURE=/tmp/dissect-monorepo-test uv run --group dev pytest tests/integration -v
+MONOREPO_FIXTURE=/tmp/dissect-monorepo-test uv run --group dev pytest template/.monorepo/tests/integration -v
 ```
 
 Omit the variable to have pytest build a fresh monorepo automatically (slow, but
 mirrors what CI does):
 
 ```sh
-uv run --group dev pytest tests/integration -v
+uv run --group dev pytest template/.monorepo/tests/integration -v
 ```
 
 ## Documentation
 
-- [doc/recipes.md](doc/recipes.md) — Justfile recipe reference and user guide
-- [doc/folder-layout.md](doc/folder-layout.md) — monorepo directory structure
-- [doc/tooling.md](doc/tooling.md) — tooling choices and rationale
-- [doc/release-strategy.md](doc/release-strategy.md) — release workflow
-- [doc/testing-strategy.md](doc/testing-strategy.md) — testing approach
+- [template/doc/recipes.md](template/doc/recipes.md) — Justfile recipe reference and user guide
+- [template/doc/folder-layout.md](template/doc/folder-layout.md) — monorepo directory structure
+- [template/doc/tooling.md](template/doc/tooling.md) — tooling choices and rationale
+- [template/doc/release-strategy.md](template/doc/release-strategy.md) — release workflow
+- [template/doc/testing-strategy.md](template/doc/testing-strategy.md) — testing approach
 

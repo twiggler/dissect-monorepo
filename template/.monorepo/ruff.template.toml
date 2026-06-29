@@ -1,0 +1,8 @@
+# Inherit the base monorepo linting rules
+extend = "../ruff.toml"
+
+# Override the target version so the IDE allows Python 3.11+ features
+target-version = "py311"
+
+# Force Ruff to lint this directory (overriding the root include = ["projects/**/*.py"])
+include = ["**/*.py"]

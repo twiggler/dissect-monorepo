@@ -1,3 +1,5 @@
+src = [".", "template/.monorepo"]
+
 line-length = 120
 required-version = ">=0.13.1"
 
@@ -14,7 +16,7 @@ select = [
 ignore = ["E203", "B904", "UP024", "ANN002", "ANN003", "ANN204", "ANN401", "SIM105", "TRY003"]
 
 [lint.per-file-ignores]
-"tests/**" = ["ANN", "INP001", "S101", "PLC0415"]
+"template/.monorepo/tests/**" = ["ANN", "INP001", "PERF203", "S101", "PLC0415"]
 "**/*.pyi" = ["E", "F", "F401", "PYI"]
 "migrate/**" = ["ANN", "INP001"]
 "utils/**" = ["INP001"]

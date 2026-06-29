@@ -79,10 +79,8 @@ def pypiserver_instance(tmp_path):
             str(port),
             "--overwrite",
             "--disable-fallback",  # return 404 for unknown packages instead of
-            # redirecting to PyPI; prevents uv from
-            # following a cross-origin redirect and
-            # incorrectly using PyPI hashes for the
-            # pre-publish existence check (uv >= 0.11.17)
+            # redirecting to PyPI; prevents uv from following a cross-origin redirect and
+            # incorrectly using PyPI hashes for the pre-publish existence check (uv >= 0.11.17)
             "-a",
             ".",  # no authentication required for any action
             "-P",
@@ -104,42 +102,67 @@ def pypiserver_instance(tmp_path):
             proc.communicate()
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
+@pytest.fixture
+def mock_pypi_index(monorepo, pypiserver_instance):
+    """Configure uv in the monorepo to publish to the local pypiserver.
 
+    Returns:
+        The name of the configured index to be passed to the release script.
+    """
+    port, _ = pypiserver_instance
+    index_name = "testlocal"
 
-def test_release_publishes_and_creates_tag(monorepo, pypiserver_instance, tmp_path):
-    """release_pure.sh builds, publishes to a local index, and creates a git tag."""
-    port, packages_dir = pypiserver_instance
-    name = "dissect.util"
-    version = _version(monorepo, name)
-
-    # Redirect git push to a local bare repo to avoid network calls.
-    remote = tmp_path / "remote.git"
-    subprocess.run(
-        ["git", "clone", "--bare", "--local", str(monorepo), str(remote)],
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "remote", "set-url", "origin", str(remote)],
-        cwd=monorepo,
-        check=True,
-        capture_output=True,
-    )
-
-    # Register the local pypiserver as the "testlocal" named index in uv config.
     (monorepo / "uv.toml").write_text(
         f"[[index]]\n"
-        f'name = "testlocal"\n'
+        f'name = "{index_name}"\n'
         f'url = "http://localhost:{port}/simple/"\n'
         f'publish-url = "http://localhost:{port}"\n'
         f"explicit = true\n"
     )
 
+    return index_name
+
+
+@pytest.fixture
+def mock_origin(monorepo, tmp_path):
+    """Set up a local bare repository as the 'origin' remote for the monorepo.
+
+    Absorbs 'git push' commands during tests to prevent network calls and
+    accidental pushes to real repositories.
+    """
+    remote = tmp_path / "remote.git"
+
+    # Create the bare clone
+    subprocess.run(
+        ["git", "clone", "--bare", "--local", str(monorepo), str(remote)],
+        check=True,
+        capture_output=True,
+    )
+
+    # Upsert 'origin': set-url if copied via MONOREPO_FIXTURE, otherwise add it
+    if subprocess.run(["git", "remote", "get-url", "origin"], cwd=monorepo, stderr=subprocess.DEVNULL).returncode == 0:
+        subprocess.run(
+            ["git", "remote", "set-url", "origin", str(remote)], cwd=monorepo, check=True, capture_output=True
+        )
+    else:
+        subprocess.run(["git", "remote", "add", "origin", str(remote)], cwd=monorepo, check=True, capture_output=True)
+
+    return remote
+
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+
+
+def test_release_publishes_and_creates_tag(monorepo, pypiserver_instance, mock_origin, mock_pypi_index):
+    """release_pure.sh builds, publishes to a local index, and creates a git tag."""
+    _, packages_dir = pypiserver_instance
+    name = "dissect.util"
+    version = _version(monorepo, name)
+
     result = subprocess.run(
-        ["just", "release", name, "--index", "testlocal"],
+        ["just", "release", name, "--index", mock_pypi_index],
         cwd=monorepo,
         capture_output=True,
         text=True,
@@ -155,3 +178,4 @@ def test_release_publishes_and_creates_tag(monorepo, pypiserver_instance, tmp_pa
 
     # The release tag must exist in the local clone.
     assert f"{name}/{version}" in _git_tags(monorepo)
+    assert f"{name}/{version}" in _git_tags(mock_origin)
