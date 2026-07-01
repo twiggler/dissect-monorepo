@@ -31,11 +31,22 @@ def monorepo_source(tmp_path_factory, request):
     # inside the base temp dir that has not been created yet.
     scripts_dir = Path(request.config.rootdir).parent.parent
     target = tmp_path_factory.getbasetemp() / "monorepo-source"
+    # gc.autoDetach=false makes every auto-triggered gc run synchronously so no
+    # background gc process outlives run_pipeline.sh.
+    no_bg_gc_env = {
+        **os.environ,
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "gc.autoDetach",
+        "GIT_CONFIG_VALUE_0": "false",
+    }
     subprocess.run(
         ["bash", "migrate/run_pipeline.sh", str(target)],
         check=True,
         cwd=scripts_dir,
+        env=no_bg_gc_env,
     )
+    # Pack any remaining loose objects so shutil.copytree gets a stable snapshot.
+    subprocess.run(["git", "gc"], check=True, cwd=target)
     return target
 
 
