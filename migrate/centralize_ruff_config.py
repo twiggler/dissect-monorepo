@@ -2,8 +2,6 @@
 # dependencies = ["tomlkit"]
 # ///
 
-import shutil
-import sys
 from pathlib import Path
 
 import tomlkit
@@ -12,7 +10,6 @@ import tomlkit
 REPO_ROOT = Path(__file__).parent.parent  # monorepo-scripts repo root
 PROJECTS_DIR = Path("projects")  # target repo (cwd)
 ROOT_TOML = Path("pyproject.toml")  # target repo (cwd)
-RUFF_CONFIG_FILE = REPO_ROOT / "template/ruff.template.toml"
 # ---------------------
 
 
@@ -54,23 +51,11 @@ def strip_ruff_from_toml(file_path):
 
 
 def main():
-    # 1. Ensure the central config exists first
-    if not RUFF_CONFIG_FILE.exists():
-        print(f"ERROR: {RUFF_CONFIG_FILE} not found!", file=sys.stderr)
-        print("Please create the file first with your authoritative settings.", file=sys.stderr)
-        sys.exit(1)
-
-    # Copy the central config to the current working directory
-    shutil.copy(RUFF_CONFIG_FILE, Path.cwd() / RUFF_CONFIG_FILE.name)
-    print(f"Copied {RUFF_CONFIG_FILE} to current directory.")
-
-    print(f"Using {RUFF_CONFIG_FILE} as the global source of truth.")
-
-    # 2. Clean the root pyproject.toml
+    # 1. Clean the root pyproject.toml
     if strip_ruff_from_toml(ROOT_TOML):
         print(f"  [✓] Cleaned root {ROOT_TOML}")
 
-    # 3. Clean the 31 sub-projects
+    # 2. Clean the 31 sub-projects
     print("\nCleaning local Ruff configs from sub-projects...")
     count = 0
     for toml_path in PROJECTS_DIR.rglob("pyproject.toml"):
@@ -78,7 +63,7 @@ def main():
             print(f"  [✓] Stripped: {toml_path.parent.name}")
             count += 1
 
-    print(f"\nSuccess! 31 projects cleaned. Ruff will now default to {RUFF_CONFIG_FILE}.")
+    print("\nSuccess! 31 projects cleaned. Ruff will now default to the central configuration.")
     print("Test it by running: uv run ruff check .")
 
 
