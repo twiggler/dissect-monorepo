@@ -14,6 +14,8 @@ When 31 individual `dissect.*` repositories were merged into a single uv workspa
 ├── uv.lock                 # Single lockfile for all 31 packages and their dependencies
 ├── Justfile                # All developer and CI commands (see tooling.md)
 ├── ruff.toml               # Shared ruff configuration, inherited by all packages
+├── .monorepo/              # Management scripts, CI helpers, and tooling tests
+├── .github/                # GitHub Actions CI workflows
 └── projects/               # Every dissect.* package — one subdirectory each
 ```
 
@@ -28,6 +30,26 @@ When 31 individual `dissect.*` repositories were merged into a single uv workspa
 **`uv.lock`** is generated and maintained by uv. It is committed to version control so that every developer and every CI runner gets an identical environment from `uv sync`. It must not be edited by hand; `uv lock` regenerates it whenever `pyproject.toml` changes in any workspace member.
 
 **`ruff.toml`** contains formatting and lint rules that apply workspace-wide. Individual packages do not carry their own ruff configuration.
+
+---
+
+### The `.monorepo/` directory
+
+`.monorepo/` contains every management script and CI helper that the monorepo tooling depends on. It is deployed to every target repository by `migrate/install_config.sh` and is not a Python package — it has no `__init__.py` and is not a uv workspace member. Scripts cover version management, release publishing, affected-test detection, CI orchestration, and documentation checks. A few config files (`tooling-python`, `pyproject.toml`, `ruff.template.toml`) configure the tooling interpreter, pytest, and ruff for this directory specifically.
+
+```
+.monorepo/
+├── *.py / *.sh             # Management scripts and CI helpers
+├── tooling-python          # uv Python version spec for the tooling interpreter
+├── pyproject.toml          # pytest ini for the tooling test suite
+├── ruff.template.toml      # Ruff config for this directory
+└── tests/                  # Unit and integration tests for the tooling scripts
+    ├── conftest.py
+    ├── unit/               # Fast tests for individual scripts
+    └── integration/        # End-to-end tests: exercises just bump, just release, etc.
+```
+
+**`tests/`**: the tooling test suite. Unit tests cover individual script functions; integration tests build a throw-away copy of the monorepo fixture and exercise `just bump`, `just bump-patch`, `just release`, and related recipes end-to-end. Run with `just test-tooling`, `just test-tooling-unit`, or `just test-tooling-integration` (see [Tooling](#tooling) in recipes.md).
 
 ---
 

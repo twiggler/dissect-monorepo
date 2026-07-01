@@ -23,6 +23,7 @@ Run `just --list` at any time for a quick one-line summary of all available reci
   - [Building native extensions](#building-native-extensions)
   - [Releasing](#releasing)
   - [Code quality](#code-quality)
+  - [Tooling](#tooling)
   - [Maintenance](#maintenance)
     - [`just sync`](#just-sync-env)
     - [`just clean`](#just-clean)
@@ -248,6 +249,17 @@ just bump dissect.util dissect.cstruct
 just bump auto
 ```
 
+#### `just bump-patch <packages>`
+
+Bump the patch component of one or more workspace packages and regenerate `uv.lock`. Always produces a three-part version (e.g. `3.5` → `3.5.1`, `3.5.2` → `3.5.3`). `auto` is not supported — patch bumps always require explicit package names.
+
+**Guards**: identical to `just bump` — refuses to bump any package whose current version has no release tag yet, and refuses to bump any package that has no new commits since its last release tag. A batch bump is aborted if any single target fails a guard.
+
+```
+just bump-patch dissect.util
+just bump-patch dissect.util dissect.cstruct
+```
+
 #### `just pending-releases [--names]`
 
 List workspace packages whose current version has no corresponding git release tag (i.e. not yet published). Pass `--names` to get a bare newline-separated list of package names, suitable for scripting.
@@ -283,6 +295,49 @@ Run ruff check and format. Pass `fix="true"` to apply fixes; default is report-o
 #### `just vermin`
 
 Run `vermin` to verify that no project uses Python features newer than the declared minimum version (`3.10`).
+
+---
+
+### Tooling
+
+These recipes run and lint the monorepo management scripts themselves. They operate on the `.monorepo/` directory rather than on the `projects/` packages.
+
+#### `just test-tooling [flags]`
+
+Run the full tooling test suite (unit and integration tests under `.monorepo/tests/`). `MONOREPO_FIXTURE` defaults to `.` (the current monorepo). Pass any extra pytest flags as positional arguments.
+
+```
+just test-tooling
+just test-tooling -v
+MONOREPO_FIXTURE=/tmp/dissect-monorepo-test just test-tooling -v
+```
+
+#### `just test-tooling-unit [flags]`
+
+Run only the unit tests under `.monorepo/tests/unit/`.
+
+```
+just test-tooling-unit
+just test-tooling-unit -x
+```
+
+#### `just test-tooling-integration [flags]`
+
+Run only the integration tests under `.monorepo/tests/integration/`. Integration tests are slower — they build a throw-away copy of the monorepo and exercise the full `just bump` / `just release` workflows end-to-end. `MONOREPO_FIXTURE` defaults to `.`, which reuses the current working tree as the fixture to avoid a full build.
+
+```
+just test-tooling-integration -k "test_bump"
+MONOREPO_FIXTURE=/tmp/dissect-monorepo-test just test-tooling-integration -v
+```
+
+#### `just lint-tooling [fix]`
+
+Run `ruff check` and `ruff format --check` over the `.monorepo/` directory. Pass `fix="true"` to apply auto-fixes instead of only reporting.
+
+```
+just lint-tooling
+just lint-tooling fix="true"
+```
 
 ---
 
