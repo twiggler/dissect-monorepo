@@ -14,7 +14,7 @@ Prints one package name per line to stdout.
 If a changed file matches a global-trigger pattern, ALL packages are printed.
 
 Usage:
-    git diff --name-only origin/master | uv run --group dev python .monorepo/affected_tests.py
+    git diff --name-only origin/main | uv run --group dev python .monorepo/affected_tests.py
 """
 
 import sys

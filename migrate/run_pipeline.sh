@@ -16,7 +16,7 @@ if [[ -n "$(find "$TARGET_DIR" -maxdepth 1 -mindepth 1 -print -quit 2>/dev/null)
 fi
 mkdir -p "$TARGET_DIR"
 cd "$TARGET_DIR"
-git init
+git init -b main
 
 run() {
   echo

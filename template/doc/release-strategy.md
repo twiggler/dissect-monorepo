@@ -18,7 +18,7 @@ All 31 `dissect.*` packages have been migrated from individual repositories into
 
 Introducing automated version bumping is therefore **out of scope for this migration**. The version decision remains manual, as it was before. What changes is the mechanics: in the per-repo workflow the version was dynamic, derived from a git tag at build time — pushing a tag *was* the release act. In the monorepo, tags no longer drive individual package releases, so the version is instead a static field in each project's `pyproject.toml`, edited directly before publishing.
 
-**Why tags do not trigger releases in the monorepo**: restoring the tag-as-trigger model would require CI to write the version back into `pyproject.toml` (and regenerate `uv.lock`) and push that commit to `master`. This creates several compounding problems: CI needs write access and the push must bypass branch protection rules; the machine-generated commit appears in `git log` and `git blame`; pushing 10 release tags simultaneously fires 10 independent concurrent workflows with no coordination between them; and any failure mid-way leaves `pyproject.toml` out of sync with the published state. The `workflow_dispatch` trigger avoids all of this — it provides the same explicit "I am intentionally releasing now" signal, while leaving version management in the developer's hands and keeping CI read-only with respect to the repository.
+**Why tags do not trigger releases in the monorepo**: restoring the tag-as-trigger model would require CI to write the version back into `pyproject.toml` (and regenerate `uv.lock`) and push that commit to `main`. This creates several compounding problems: CI needs write access and the push must bypass branch protection rules; the machine-generated commit appears in `git log` and `git blame`; pushing 10 release tags simultaneously fires 10 independent concurrent workflows with no coordination between them; and any failure mid-way leaves `pyproject.toml` out of sync with the published state. The `workflow_dispatch` trigger avoids all of this — it provides the same explicit "I am intentionally releasing now" signal, while leaving version management in the developer's hands and keeping CI read-only with respect to the repository.
 
 `just bump` and `just bump-patch` recipes will handle the mechanical part — they increment the `version` field in the `pyproject.toml` of one or more projects:
 
@@ -112,7 +112,7 @@ A concurrency group (`group: release`, `cancel-in-progress: false`) ensures that
 
 **GitHub App token — why it is required**
 
-After successfully publishing a package, `release.yml` pushes a namespaced git tag (e.g. `dissect.util/3.24.1`) to `master`. That tag push is what triggers `release-native.yml` to build and publish binary wheels automatically.
+After successfully publishing a package, `release.yml` pushes a namespaced git tag (e.g. `dissect.util/3.24.1`) to `main`. That tag push is what triggers `release-native.yml` to build and publish binary wheels automatically.
 
 GitHub intentionally suppresses workflow triggers when a push is made with the built-in `GITHUB_TOKEN`: a tag pushed by `GITHUB_TOKEN` will *not* fire any `push: tags`-triggered workflow. This guard exists to prevent accidental infinite loops, but it also means the native wheel pipeline would never start automatically.
 

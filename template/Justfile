@@ -3,7 +3,7 @@
 #   just test-all
 #   just test <project> <env>
 #   just test-affected
-#   just test-affected origin/master 3.11
+#   just test-affected origin/main 3.11
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 tooling_python := `cat .monorepo/tooling-python`
@@ -199,8 +199,8 @@ test-all-envs:
     done
 
 # Run tests only for packages affected by changes vs a base ref.
-# Example: just test-affected origin/master 3.11
-test-affected ref="origin/master" env=default_python:
+# Example: just test-affected origin/main 3.11
+test-affected ref="origin/main" env=default_python:
     #!/usr/bin/env bash
     set -euo pipefail
     packages=$(git diff --name-only {{ref}} | uv run --python "{{tooling_python}}" .monorepo/affected_tests.py)
@@ -260,8 +260,8 @@ test-native-all env=default_python:
 # Trade-off: O(all native) builds vs. O(affected native) — acceptable while the number
 # of native projects stays small and each has a pure-Python fallback.
 # DISSECT_FORCE_NATIVE causes native projects to fail (not skip) if the .so is unavailable.
-# Example: just test-native-affected origin/master 3.10
-test-native-affected ref="origin/master" env=default_python:
+# Example: just test-native-affected origin/main 3.10
+test-native-affected ref="origin/main" env=default_python:
     just build-all-native-inplace {{env}}
     DISSECT_FORCE_NATIVE=1 just test-affected {{ref}} {{env}}
 

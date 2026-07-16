@@ -158,10 +158,10 @@ Run `test-all` for every Python version listed in `[tool.monorepo.test].python-v
 
 #### `just test-affected [ref] [env]`
 
-Run tests only for packages whose source files changed relative to `ref` (default: `origin/master`) using the given Python version (default: `3.10`). The list of affected packages is computed by `.monorepo/affected_tests.py`.
+Run tests only for packages whose source files changed relative to `ref` (default: `origin/main`) using the given Python version (default: `3.10`). The list of affected packages is computed by `.monorepo/affected_tests.py`.
 
 ```
-just test-affected origin/master 3.11
+just test-affected origin/main 3.11
 ```
 
 #### `just test-native <project> <env> [args]`

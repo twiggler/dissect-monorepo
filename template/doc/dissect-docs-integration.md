@@ -33,8 +33,8 @@ RTD's version management is built around a set of implicit rules that do not com
 well with how the monorepo works:
 
 **`latest` tracks the default branch continuously.** RTD rebuilds the `latest` version
-on every push to `master`. The monorepo uses trunk-based development — every pull
-request is merged directly to `master`. This means documentation would be rebuilt and
+on every push to `main`. The monorepo uses trunk-based development — every pull
+request is merged directly to `main`. This means documentation would be rebuilt and
 updated on every PR merge, including ones that have nothing to do with documentation
 or with any public-facing change. There is no mechanism to suppress this without
 moving away from trunk-based development.

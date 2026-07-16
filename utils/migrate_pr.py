@@ -506,7 +506,7 @@ def main() -> None:
                 "title": f"[migrated] {title}",
                 "body": pr_body,
                 "head": branch_name,
-                "base": "master",
+                "base": "main",
                 "draft": True,
             },
         )
