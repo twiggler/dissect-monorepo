@@ -13,15 +13,17 @@ Run `just --list` at any time for a quick one-line summary of all available reci
 
 - [User guides](#user-guides)
   - [Day-to-day development](#day-to-day-development)
-  - [Releasing a pure-Python project](#releasing-a-pure-python-project)
-  - [Releasing a batch of projects](#releasing-a-batch-of-projects)
-  - [Releasing a native (Rust) project](#releasing-a-native-rust-project)
+  - [Releasing](#releasing)
+    - [Releasing via the workflow (recommended)](#releasing-via-the-workflow-recommended)
+    - [Releasing a pure-Python project locally](#releasing-a-pure-python-project-locally)
+    - [Releasing a batch of projects locally](#releasing-a-batch-of-projects-locally)
+    - [Releasing a native (Rust) project](#releasing-a-native-rust-project)
   - [Testing across all Python versions](#testing-across-all-python-versions)
 - [Configuration variables](#configuration-variables)
 - [Recipe overview](#recipe-overview)
   - [Testing](#testing)
   - [Building native extensions](#building-native-extensions)
-  - [Releasing](#releasing)
+  - [Releasing](#releasing-1)
   - [Code quality](#code-quality)
   - [Tooling](#tooling)
   - [Maintenance](#maintenance)
@@ -41,7 +43,33 @@ Run `just --list` at any time for a quick one-line summary of all available reci
 3. Run `just test-affected` before pushing to check all projects touched by your diff.
 4. Run `just lint` to verify formatting and minimum-version compliance.
 
-### Releasing a pure-Python project
+### Releasing
+
+**Releases should be initiated through the GitHub Actions release workflow, not from a developer's machine.** The workflow is the recommended, default path for every release. The local `just release` recipe still exists, but it is intended only for testing (dry-runs against TestPyPI) and emergencies (e.g. CI is unavailable and a fix must ship).
+
+Running releases through the workflow is strongly preferred for three reasons:
+
+- **Security** — publishing credentials never leave GitHub. The workflow authenticates via an environment-scoped `UV_PUBLISH_TOKEN` secret (or OIDC Trusted Publishing), so no PyPI token needs to live on, or be exported from, a developer's machine.
+- **Isolation** — each release runs on a clean, ephemeral CI runner from a known-good checkout of the default branch, eliminating "works on my machine" state such as stray local edits, uncommitted files, or a dirty virtual environment.
+- **Auditing** — every release is a recorded workflow run with a timestamp, the triggering user, the exact inputs, and full logs. The `pypi` environment can additionally require a manual approval gate, and a concurrency lock guarantees only one release runs at a time.
+
+See [release-strategy.md](release-strategy.md) for the full design rationale, authentication modes, and required secrets.
+
+#### Releasing via the workflow (recommended)
+
+1. **Bump the version and commit** (see the local guides below for the `just bump` mechanics) so the default branch contains the version you intend to publish.
+2. In GitHub, open **Actions → Release → Run workflow** and fill in the form:
+
+   ![The GitHub Actions Release workflow "Run workflow" form](release_workflow.png)
+
+   - **`packages`** — a space-separated list of project names, or `all` to release every project with a pending (untagged) version.
+   - **`index`** — the target index: `pypi` (default) or `testpypi` for a dry run.
+3. Click **Run workflow**. The run publishes each pending project and pushes a namespaced git tag (`dissect.util/<version>`) per successful publish.
+4. For **native (Rust) projects**, no extra step is needed: the tag pushed in step 3 automatically triggers `release-native.yml`, which builds and publishes the platform-specific wheels.
+
+#### Releasing a pure-Python project locally
+
+> **For testing and emergencies only.** Prefer [Releasing via the workflow](#releasing-via-the-workflow-recommended). The local path requires a `UV_PUBLISH_TOKEN` on your machine and has no approval gate or audit trail.
 
 1. **Bump the version** — only if the current version has already been released:
    ```
@@ -72,7 +100,9 @@ Run `just --list` at any time for a quick one-line summary of all available reci
    just release dissect
    ```
 
-### Releasing a batch of projects
+#### Releasing a batch of projects locally
+
+> **For testing and emergencies only.** Prefer [Releasing via the workflow](#releasing-via-the-workflow-recommended) with `packages: all`, which performs the same batch release under CI isolation and auditing.
 
 1. **Auto-bump all projects with new commits** since their last release:
    ```
@@ -90,7 +120,7 @@ Run `just --list` at any time for a quick one-line summary of all available reci
    just release all
    ```
 
-### Releasing a native (Rust) project
+#### Releasing a native (Rust) project
 
 Native projects cannot be released with `just release` because they require platform-specific wheels built by cibuildwheel. Instead:
 
@@ -225,6 +255,8 @@ just test-native-wheels auto "dissect.util dissect.fve"         # specific proje
 ### Releasing
 
 #### `just release <packages|all> [--index testpypi]`
+
+> **Prefer the release workflow.** Releases should normally be initiated through GitHub Actions (**Actions → Release**) — see [Releasing via the workflow](#releasing-via-the-workflow-recommended). Run this recipe locally only for testing or emergencies.
 
 Publish pending workspace projects to PyPI, then create and push git tags. Only pure-Python projects — native (Rust) projects are released via the `release-native.yml` GitHub Actions workflow.
 
