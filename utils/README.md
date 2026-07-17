@@ -11,7 +11,7 @@ Maintainer utilities for one-off operations. These scripts are not deployed to t
 
 ## migrate_pr.py
 
-Migrates an open pull request from a legacy per-package repository to the monorepo.
+Migrates an open pull request from a legacy per-project repository to the monorepo.
 It shallow-clones the PR branch into a throwaway directory, rewrites all file paths to
 the monorepo `src`-layout with `git filter-repo`, serialises the rewritten commits as a
 patch mailbox, and applies them with `git am` onto a new branch in the monorepo

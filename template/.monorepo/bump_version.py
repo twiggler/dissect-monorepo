@@ -6,32 +6,32 @@
 #   "tomlkit",
 # ]
 # ///
-"""Manage versions for workspace packages.
+"""Manage versions for workspace projects.
 
 Subcommands:
     bump [--patch] (auto | <package>...)
-        Bump the version of the given packages.
+        Bump the version of the given projects.
         Without --patch, bumps the minor component and resets patch (default).
         With --patch, increments the patch component only; 'auto' is not
         supported with --patch.
-        'auto' bumps every package that both has a release tag for its current
+        'auto' bumps every project that both has a release tag for its current
         version AND has new commits in its project directory since that tag;
-        pending packages (no release tag) are silently skipped.
-        Refuses to bump any explicitly named package whose current version has
-        no release tag — release pending packages first to avoid double-bumps.
-        Refuses to bump any explicitly named package that has no new commits
+        pending projects (no release tag) are silently skipped.
+        Refuses to bump any explicitly named project whose current version has
+        no release tag — release pending projects first to avoid double-bumps.
+        Refuses to bump any explicitly named project that has no new commits
         since its last release tag — there is nothing to release.
 
     pending-releases [--names]
-        List packages whose current version has no matching git release tag
-        (<name>/<version>). With --names, print only package names, one per line.
+        List projects whose current version has no matching git release tag
+        (<name>/<version>). With --names, print only project names, one per line.
 
     list-packages
-        Print the declared name of every workspace package, one per line,
+        Print the declared name of every workspace project, one per line,
         sorted alphabetically.
 
     package-version <package> [<package> ...]
-        Print "<name> <version>" for each requested package, in the order
+        Print "<name> <version>" for each requested project, in the order
         given. Exits 1 if any name is unknown.
 """
 
@@ -178,7 +178,7 @@ def cmd_package_version(args: argparse.Namespace) -> int:
     unknown = [p for p in args.packages if canonicalize_name(p) not in workspace]
     if unknown:
         for p in unknown:
-            print(f"error: unknown package {p!r}", file=sys.stderr)
+            print(f"error: unknown project {p!r}", file=sys.stderr)
         return 1
     for p in args.packages:
         _, name, version = workspace[canonicalize_name(p)]
@@ -187,7 +187,7 @@ def cmd_package_version(args: argparse.Namespace) -> int:
 
 
 def _resolve_auto_targets(workspace: dict[str, tuple[Path, str, str]]) -> list[str] | int:
-    """Return the list of packages to bump automatically, or an int exit code."""
+    """Return the list of projects to bump automatically, or an int exit code."""
     to_bump = []
     skipped_pending = []
 
@@ -200,7 +200,7 @@ def _resolve_auto_targets(workspace: dict[str, tuple[Path, str, str]]) -> list[s
         to_bump.append(name)
 
     if skipped_pending:
-        print(f"[skip] {len(skipped_pending)} package(s) already bumped and awaiting release:")
+        print(f"[skip] {len(skipped_pending)} project(s) already bumped and awaiting release:")
         for name in skipped_pending:
             print(f"  {name}")
 
@@ -212,16 +212,16 @@ def _resolve_auto_targets(workspace: dict[str, tuple[Path, str, str]]) -> list[s
 
 
 def _resolve_explicit_targets(workspace: dict[str, tuple[Path, str, str]], packages: list[str]) -> list[str] | int:
-    """Validate and return the explicitly requested packages to bump, or an int exit code."""
+    """Validate and return the explicitly requested projects to bump, or an int exit code."""
     unknown = [name for name in packages if canonicalize_name(name) not in workspace]
     if unknown:
         for name in unknown:
-            print(f"error: unknown package {name!r}", file=sys.stderr)
+            print(f"error: unknown project {name!r}", file=sys.stderr)
         return 1
 
     double_bumps = [name for name in packages if _find_release_tag(name, workspace[canonicalize_name(name)][2]) is None]
     if double_bumps:
-        print("error: the following packages have no release tag for their current version.", file=sys.stderr)
+        print("error: the following projects have no release tag for their current version.", file=sys.stderr)
         print("Release them first, or create the tags manually.", file=sys.stderr)
         print(file=sys.stderr)
         for name in double_bumps:
@@ -235,7 +235,7 @@ def _resolve_explicit_targets(workspace: dict[str, tuple[Path, str, str]], packa
         if not _has_commits_since_tag(name, version, project_dir)
     ]
     if no_new_commits:
-        print("error: the following packages have no new commits since their last release tag.", file=sys.stderr)
+        print("error: the following projects have no new commits since their last release tag.", file=sys.stderr)
         print("Nothing to release — bump is not needed.", file=sys.stderr)
         print(file=sys.stderr)
         for name in no_new_commits:
@@ -256,7 +256,7 @@ def _apply_bumps(workspace: dict[str, tuple[Path, str, str]], targets: list[str]
         toml_path.write_text(tomlkit.dumps(doc))
         print(f"  {declared_name}: {version} → {new_version}")
 
-    print(f"\nBumped {len(targets)} package(s).")
+    print(f"\nBumped {len(targets)} project(s).")
     return 0
 
 
@@ -286,33 +286,33 @@ def main() -> None:
 
     pending_parser = subparsers.add_parser(
         "pending-releases",
-        help="List packages whose current version has no release tag.",
+        help="List projects whose current version has no release tag.",
     )
     pending_parser.add_argument(
         "--names",
         action="store_true",
-        help="Print only package names, one per line.",
+        help="Print only project names, one per line.",
     )
 
     subparsers.add_parser(
         "list-packages",
-        help="Print all workspace package names, one per line.",
+        help="Print all workspace project names, one per line.",
     )
 
     package_version_parser = subparsers.add_parser(
         "package-version",
-        help='Print "<name> <version>" for one or more workspace packages.',
+        help='Print "<name> <version>" for one or more workspace projects.',
     )
     package_version_parser.add_argument(
         "packages",
         nargs="+",
         metavar="package",
-        help="Package names to look up.",
+        help="Project names to look up.",
     )
 
     bump_parser = subparsers.add_parser(
         "bump",
-        help="Bump the version of workspace packages.",
+        help="Bump the version of workspace projects.",
     )
     bump_parser.add_argument(
         "--patch",
@@ -325,7 +325,7 @@ def main() -> None:
         nargs="+",
         metavar="package",
         help=(
-            "Package names, or 'auto' to bump minor version of packages with new commits since their last release tag."
+            "Project names, or 'auto' to bump minor version of projects with new commits since their last release tag."
         ),
     )
 

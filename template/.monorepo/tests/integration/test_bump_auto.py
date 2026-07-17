@@ -1,9 +1,9 @@
 """Integration tests for the 'just bump-auto' recipe.
 
 Verifies that just bump-auto:
-- Bumps packages that have a release tag AND new commits since that tag
-- Skips packages with a release tag but no new commits since it
-- Silently skips (no error) packages that are pending release (no tag)
+- Bumps projects that have a release tag AND new commits since that tag
+- Skips projects with a release tag but no new commits since it
+- Silently skips (no error) projects that are pending release (no tag)
 - Handles a mix of all three cases correctly
 """
 
@@ -41,7 +41,7 @@ _add_commit = helpers.add_commit
 
 
 def test_auto_bumps_package_with_new_commits(monorepo):
-    """A package with a release tag and new commits gets bumped."""
+    """A project with a release tag and new commits gets bumped."""
     name = "dissect.util"
     original = _version(monorepo, name)
     _add_tag(monorepo, name, original)
@@ -56,7 +56,7 @@ def test_auto_bumps_package_with_new_commits(monorepo):
 
 
 def test_auto_skips_package_without_new_commits(monorepo):
-    """A package with a release tag but no new commits is not bumped."""
+    """A project with a release tag but no new commits is not bumped."""
     name = "dissect.util"
     original = _version(monorepo, name)
     _add_tag(monorepo, name, original)
@@ -67,15 +67,15 @@ def test_auto_skips_package_without_new_commits(monorepo):
 
 
 def test_auto_silently_skips_pending_packages(monorepo):
-    """Packages with no release tag are skipped without error."""
-    # No tags at all — every package is pending.
+    """Projects with no release tag are skipped without error."""
+    # No tags at all — every project is pending.
     result = _run_bump_auto(monorepo)
     assert result.returncode == 0, result.stderr
     assert "Nothing to auto-bump." in result.stdout
 
 
 def test_auto_mixed_scenario(monorepo):
-    """Only tagged packages with new commits are bumped; others are skipped."""
+    """Only tagged projects with new commits are bumped; others are skipped."""
     util_version = _version(monorepo, "dissect.util")
     cstruct_version = _version(monorepo, "dissect.cstruct")
 
@@ -86,7 +86,7 @@ def test_auto_mixed_scenario(monorepo):
     # dissect.cstruct: tagged, no new commit → should be skipped
     _add_tag(monorepo, "dissect.cstruct", cstruct_version)
 
-    # all other packages: no tag → silently skipped
+    # all other projects: no tag → silently skipped
 
     result = _run_bump_auto(monorepo)
     assert result.returncode == 0, result.stderr
@@ -96,7 +96,7 @@ def test_auto_mixed_scenario(monorepo):
 
 
 def test_auto_migration_commits_do_not_trigger_bump(monorepo):
-    """Migration commits must not cause packages to be auto-bumped.
+    """Migration commits must not cause projects to be auto-bumped.
 
     The monorepo fixture is built by the migration pipeline, which already
     places migration/start/<name> and migration/end.  Only the release tags need
@@ -104,7 +104,7 @@ def test_auto_migration_commits_do_not_trigger_bump(monorepo):
 
     Expected: bump auto reports "Nothing to auto-bump."
     """
-    # Tag every package at its current version (simulating post-migration releases).
+    # Tag every project at its current version (simulating post-migration releases).
     for toml_path in sorted((monorepo / "projects").glob("*/pyproject.toml")):
         data = tomllib.loads(toml_path.read_text())
         name = data["project"]["name"]

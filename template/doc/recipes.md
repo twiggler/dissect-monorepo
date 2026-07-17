@@ -2,7 +2,7 @@
 
 This document is organised in two parts:
 
-- **[User guides](#user-guides)** — step-by-step walkthroughs for common tasks such as day-to-day development, releasing packages, and running the full test matrix.
+- **[User guides](#user-guides)** — step-by-step walkthroughs for common tasks such as day-to-day development, releasing projects, and running the full test matrix.
 - **[Recipe overview](#recipe-overview)** — a detailed reference for every individual `just` recipe: what it does, all arguments, and usage examples.
 
 Run `just --list` at any time for a quick one-line summary of all available recipes.
@@ -13,9 +13,9 @@ Run `just --list` at any time for a quick one-line summary of all available reci
 
 - [User guides](#user-guides)
   - [Day-to-day development](#day-to-day-development)
-  - [Releasing a pure-Python package](#releasing-a-pure-python-package)
-  - [Releasing a batch of packages](#releasing-a-batch-of-packages)
-  - [Releasing a native (Rust) package](#releasing-a-native-rust-package)
+  - [Releasing a pure-Python project](#releasing-a-pure-python-project)
+  - [Releasing a batch of projects](#releasing-a-batch-of-projects)
+  - [Releasing a native (Rust) project](#releasing-a-native-rust-project)
   - [Testing across all Python versions](#testing-across-all-python-versions)
 - [Configuration variables](#configuration-variables)
 - [Recipe overview](#recipe-overview)
@@ -41,7 +41,7 @@ Run `just --list` at any time for a quick one-line summary of all available reci
 3. Run `just test-affected` before pushing to check all projects touched by your diff.
 4. Run `just lint` to verify formatting and minimum-version compliance.
 
-### Releasing a pure-Python package
+### Releasing a pure-Python project
 
 1. **Bump the version** — only if the current version has already been released:
    ```
@@ -66,36 +66,36 @@ Run `just --list` at any time for a quick one-line summary of all available reci
    ```
    The script publishes the wheel and sdist, then creates and pushes a git tag `dissect.util-<version>`.
 
-5. **Update the meta-package** (if releasing `dissect` itself, or after bulk releases):
+5. **Update the meta-project** (if releasing `dissect` itself, or after bulk releases):
    ```
    just update-meta
    just release dissect
    ```
 
-### Releasing a batch of packages
+### Releasing a batch of projects
 
-1. **Auto-bump all packages with new commits** since their last release:
+1. **Auto-bump all projects with new commits** since their last release:
    ```
    just bump auto
    ```
-   This bumps every package that has a release tag for its current version and new commits since that tag. Packages that were already manually bumped (and are therefore pending release) are silently skipped.
+   This bumps every project that has a release tag for its current version and new commits since that tag. Projects that were already manually bumped (and are therefore pending release) are silently skipped.
 
 2. **Check what is pending**:
    ```
    just pending-releases
    ```
 
-3. **Release all pending packages**:
+3. **Release all pending projects**:
    ```
    just release all
    ```
 
-### Releasing a native (Rust) package
+### Releasing a native (Rust) project
 
-Native packages cannot be released with `just release` because they require platform-specific wheels built by cibuildwheel. Instead:
+Native projects cannot be released with `just release` because they require platform-specific wheels built by cibuildwheel. Instead:
 
 1. Bump the version and commit as above.
-2. Trigger the `release-native` GitHub Actions workflow manually (`workflow_dispatch`), specifying the package name. The workflow builds wheels for all platforms and architectures, runs `abi3audit`, and publishes to PyPI via OIDC Trusted Publishing.
+2. Trigger the `release-native` GitHub Actions workflow manually (`workflow_dispatch`), specifying the project name. The workflow builds wheels for all platforms and architectures, runs `abi3audit`, and publishes to PyPI via OIDC Trusted Publishing.
 
 To validate the wheel pipeline locally before triggering the workflow:
 ```
@@ -158,7 +158,7 @@ Run `test-all` for every Python version listed in `[tool.monorepo.test].python-v
 
 #### `just test-affected [ref] [env]`
 
-Run tests only for packages whose source files changed relative to `ref` (default: `origin/main`) using the given Python version (default: `3.10`). The list of affected packages is computed by `.monorepo/affected_tests.py`.
+Run tests only for projects whose source files changed relative to `ref` (default: `origin/main`) using the given Python version (default: `3.10`). The list of affected projects is computed by `.monorepo/affected_tests.py`.
 
 ```
 just test-affected origin/main 3.11
@@ -179,7 +179,7 @@ Build all Rust extensions in-place, then run the full test suite with `DISSECT_F
 
 #### `just test-native-affected [ref] [env]`
 
-Build all Rust extensions in-place, then run tests only for affected packages with `DISSECT_FORCE_NATIVE=1`. All extensions are always built (not only affected ones) so that non-affected native packages are available as compiled dependencies for the packages under test.
+Build all Rust extensions in-place, then run tests only for affected projects with `DISSECT_FORCE_NATIVE=1`. All extensions are always built (not only affected ones) so that non-affected native projects are available as compiled dependencies for the projects under test.
 
 ---
 
@@ -199,7 +199,7 @@ Compile all native extensions in-place. Iterates over the project list from `.mo
 
 #### `just build-native-wheels <pkg> [archs]`
 
-Build production wheels (abi3 + free-threaded) for a single package via cibuildwheel. The `CIBW_BUILD` specifier is derived from `python-versions` in `pyproject.toml` via `.monorepo/python_versions.py`. After building, runs `abi3audit` on any abi3 wheels to verify stable-ABI compliance. Requires Docker (or Podman) for Linux builds.
+Build production wheels (abi3 + free-threaded) for a single project via cibuildwheel. The `CIBW_BUILD` specifier is derived from `python-versions` in `pyproject.toml` via `.monorepo/python_versions.py`. After building, runs `abi3audit` on any abi3 wheels to verify stable-ABI compliance. Requires Docker (or Podman) for Linux builds.
 
 `archs` defaults to `"auto"` (host architecture only). Pass a space-separated list to build for additional platforms — callers are responsible for configuring QEMU first.
 
@@ -215,9 +215,9 @@ Wheels land in `dist/<pkg>/`.
 Build wheels for all native projects (or a specified subset) and run their tests in the built wheels via cibuildwheel's built-in test step. Used by CI on every push/PR to validate the full wheel pipeline locally or in GitHub Actions.
 
 ```
-just test-native-wheels                                         # host arch, all native packages
+just test-native-wheels                                         # host arch, all native projects
 just test-native-wheels "x86_64 i686 aarch64"                  # multi-arch (caller configures QEMU)
-just test-native-wheels auto "dissect.util dissect.fve"         # specific packages only
+just test-native-wheels auto "dissect.util dissect.fve"         # specific projects only
 ```
 
 ---
@@ -226,9 +226,9 @@ just test-native-wheels auto "dissect.util dissect.fve"         # specific packa
 
 #### `just release <packages|all> [--index testpypi]`
 
-Publish pending workspace packages to PyPI, then create and push git tags. Only pure-Python packages — native (Rust) packages are released via the `release-native.yml` GitHub Actions workflow.
+Publish pending workspace projects to PyPI, then create and push git tags. Only pure-Python projects — native (Rust) projects are released via the `release-native.yml` GitHub Actions workflow.
 
-Pass `all` to release every package that has a pending (untagged) version, or list package names explicitly. Pass `--index testpypi` to publish to TestPyPI for a dry run.
+Pass `all` to release every project that has a pending (untagged) version, or list project names explicitly. Pass `--index testpypi` to publish to TestPyPI for a dry run.
 
 For authentication, set `UV_PUBLISH_TOKEN=<token>` locally. CI uses OIDC Trusted Publishing and needs no token.
 
@@ -240,9 +240,9 @@ just release all --index testpypi
 
 #### `just bump <packages|auto>`
 
-Bump the minor version of one or more workspace packages and regenerate `uv.lock`. Pass `auto` to bump only packages that have new commits since their last release tag.
+Bump the minor version of one or more workspace projects and regenerate `uv.lock`. Pass `auto` to bump only projects that have new commits since their last release tag.
 
-**Guards**: when bumping named packages, refuses to bump any package whose current version has no release tag yet — release pending versions first to avoid double-bumps. Also refuses to bump any package that has no new commits since its last release tag — there is nothing to release. `auto` silently skips both pending packages and packages without new commits instead of erroring.
+**Guards**: when bumping named projects, refuses to bump any project whose current version has no release tag yet — release pending versions first to avoid double-bumps. Also refuses to bump any project that has no new commits since its last release tag — there is nothing to release. `auto` silently skips both pending projects and projects without new commits instead of erroring.
 
 ```
 just bump dissect.util dissect.cstruct
@@ -251,9 +251,9 @@ just bump auto
 
 #### `just bump-patch <packages>`
 
-Bump the patch component of one or more workspace packages and regenerate `uv.lock`. Always produces a three-part version (e.g. `3.5` → `3.5.1`, `3.5.2` → `3.5.3`). `auto` is not supported — patch bumps always require explicit package names.
+Bump the patch component of one or more workspace projects and regenerate `uv.lock`. Always produces a three-part version (e.g. `3.5` → `3.5.1`, `3.5.2` → `3.5.3`). `auto` is not supported — patch bumps always require explicit project names.
 
-**Guards**: identical to `just bump` — refuses to bump any package whose current version has no release tag yet, and refuses to bump any package that has no new commits since its last release tag. A batch bump is aborted if any single target fails a guard.
+**Guards**: identical to `just bump` — refuses to bump any project whose current version has no release tag yet, and refuses to bump any project that has no new commits since its last release tag. A batch bump is aborted if any single target fails a guard.
 
 ```
 just bump-patch dissect.util
@@ -262,7 +262,7 @@ just bump-patch dissect.util dissect.cstruct
 
 #### `just pending-releases [--names]`
 
-List workspace packages whose current version has no corresponding git release tag (i.e. not yet published). Pass `--names` to get a bare newline-separated list of package names, suitable for scripting.
+List workspace projects whose current version has no corresponding git release tag (i.e. not yet published). Pass `--names` to get a bare newline-separated list of project names, suitable for scripting.
 
 #### `just set-constraint <package> <specifier>`
 
@@ -274,7 +274,7 @@ just set-constraint dissect.cstruct ">=4.7,<5"
 
 #### `just update-meta`
 
-Regenerate the dependency list of the `dissect` meta-package from current workspace versions. Run this before releasing `dissect` to ensure it points at the latest versions of all member packages.
+Regenerate the dependency list of the `dissect` meta-project from current workspace versions. Run this before releasing `dissect` to ensure it points at the latest versions of all member projects.
 
 ---
 
@@ -300,7 +300,7 @@ Run `vermin` to verify that no project uses Python features newer than the decla
 
 ### Tooling
 
-These recipes run and lint the monorepo management scripts themselves. They operate on the `.monorepo/` directory rather than on the `projects/` packages.
+These recipes run and lint the monorepo management scripts themselves. They operate on the `.monorepo/` directory rather than on the projects under `projects/`.
 
 #### `just test-tooling [flags]`
 
@@ -345,7 +345,7 @@ just lint-tooling fix="true"
 
 #### `just sync [env]`
 
-Create or update the workspace virtual environment. Installs all workspace packages as editable with all extras and the `dev` dependency group. Useful after cloning or pulling changes that add new dependencies.
+Create or update the workspace virtual environment. Installs all workspace projects as editable with all extras and the `dev` dependency group. Useful after cloning or pulling changes that add new dependencies.
 
 ```
 just sync
@@ -358,7 +358,7 @@ Remove all built wheels and sdists from the `dist/` directory. Refuses to run if
 
 #### `just docs-check`
 
-Build the Sphinx API-reference docs for every project that has a `tests/_docs/` directory and fail if sphinx-build emits any warnings. All workspace packages are installed as editable so autoapi can resolve imports across sibling projects. Used by CI on every push/PR.
+Build the Sphinx API-reference docs for every project that has a `tests/_docs/` directory and fail if sphinx-build emits any warnings. All workspace projects are installed as editable so autoapi can resolve imports across sibling projects. Used by CI on every push/PR.
 
 ```
 just docs-check

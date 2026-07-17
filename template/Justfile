@@ -12,10 +12,10 @@ tooling_python := `cat .monorepo/tooling-python`
 default_python := "3.10"
 
 
-# Publish pending workspace packages to PyPI (or testpypi), then create and push git tags.
-# Pure-Python packages only — native (Rust) packages are released via the
+# Publish pending workspace projects to PyPI (or testpypi), then create and push git tags.
+# Pure-Python projects only — native (Rust) projects are released via the
 # release-native.yml GitHub Actions workflow.
-# Specify individual package names or 'all'.
+# Specify individual project names or 'all'.
 # Pass '--index testpypi' to publish to TestPyPI instead.
 # Authentication: set UV_PUBLISH_TOKEN=<token> locally; CI uses OIDC Trusted Publishing.
 # Example: just release all
@@ -31,8 +31,8 @@ clean:
     [[ -L dist ]] && { echo "error: dist is a symlink, refusing to remove" >&2; exit 1; }
     rm -rf "$PWD/dist"
 
-# List workspace packages whose current version has no release tag (i.e. not yet published).
-# Pass --names to get a bare newline-separated list of package names only.
+# List workspace projects whose current version has no release tag (i.e. not yet published).
+# Pass --names to get a bare newline-separated list of project names only.
 pending-releases *args:
     uv run --python "{{tooling_python}}" .monorepo/bump_version.py pending-releases {{args}}
 
@@ -42,12 +42,12 @@ pending-releases *args:
 set-constraint package specifier:
     uv run --python "{{tooling_python}}" .monorepo/set_constraint.py '{{package}}' '{{specifier}}'
 
-# Bump the minor version of one or more workspace packages.
-# Specify individual package names, or 'auto' to bump only packages with new
-# commits since their last release tag (pending packages are silently skipped).
-# Refuses to bump any explicitly named package whose current version has no
-# release tag yet — release pending packages first to avoid double-bumps.
-# Refuses to bump any explicitly named package with no new commits since its
+# Bump the minor version of one or more workspace projects.
+# Specify individual project names, or 'auto' to bump only projects with new
+# commits since their last release tag (pending projects are silently skipped).
+# Refuses to bump any explicitly named project whose current version has no
+# release tag yet — release pending projects first to avoid double-bumps.
+# Refuses to bump any explicitly named project with no new commits since its
 # last release tag — there is nothing to release.
 # Example: just bump dissect.util dissect.cstruct
 # Example: just bump auto
@@ -55,9 +55,9 @@ bump +packages:
     uv run --python "{{tooling_python}}" .monorepo/bump_version.py bump {{packages}}
     uv lock
 
-# Bump the patch version of one or more workspace packages.
-# 'auto' is not supported — patch bumps always require explicit package names.
-# Subject to the same guards as 'just bump': refuses to bump packages with no
+# Bump the patch version of one or more workspace projects.
+# 'auto' is not supported — patch bumps always require explicit project names.
+# Subject to the same guards as 'just bump': refuses to bump projects with no
 # release tag (double-bump guard) or no new commits since the last release tag.
 # Example: just bump-patch dissect.util
 # Example: just bump-patch dissect.util dissect.cstruct
@@ -65,7 +65,7 @@ bump-patch +packages:
     uv run --python "{{tooling_python}}" .monorepo/bump_version.py bump --patch {{packages}}
     uv lock
 
-# Regenerate the dissect meta-package dependency list from current workspace versions.
+# Regenerate the dissect meta-project dependency list from current workspace versions.
 update-meta:
     uv run --python "{{tooling_python}}" .monorepo/update_meta_deps.py
 
@@ -131,7 +131,7 @@ lint-tooling fix="false":
 
 # Build the Sphinx API-reference docs for every project that has a tests/_docs/
 # directory and fail if sphinx-build emits any warnings.
-# All workspace packages are installed as editable so autoapi can resolve imports
+# All workspace projects are installed as editable so autoapi can resolve imports
 # across sibling projects.
 # Example: just docs-check
 docs-check:
@@ -150,7 +150,7 @@ docs-clean:
     done
 
 # Sync the workspace virtual environment.
-# Creates (or updates) the default venv, installs all workspace packages as
+# Creates (or updates) the default venv, installs all workspace projects as
 # editable with all extras and the dev dependency group.
 # Example: just sync
 # Example: just sync 3.12
@@ -198,17 +198,17 @@ test-all-envs:
         just test-all "$env"
     done
 
-# Run tests only for packages affected by changes vs a base ref.
+# Run tests only for projects affected by changes vs a base ref.
 # Example: just test-affected origin/main 3.11
 test-affected ref="origin/main" env=default_python:
     #!/usr/bin/env bash
     set -euo pipefail
     packages=$(git diff --name-only {{ref}} | uv run --python "{{tooling_python}}" .monorepo/affected_tests.py)
     if [ -z "$packages" ]; then
-        echo "No packages affected. Nothing to do."
+        echo "No projects affected. Nothing to do."
         exit 0
     fi
-    echo "Affected packages: $packages"
+    echo "Affected projects: $packages"
     for pkg in $packages; do
         just test "$pkg" {{env}}
     done
@@ -254,9 +254,9 @@ test-native-all env=default_python:
     just build-all-native-inplace {{env}}
     DISSECT_FORCE_NATIVE=1 just test-all {{env}}
 
-# Build all native extensions in-place, then run tests for affected packages only.
+# Build all native extensions in-place, then run tests for affected projects only.
 # All extensions are always built (not just affected ones) so that non-affected native
-# packages are available as compiled dependencies for the packages under test.
+# projects are available as compiled dependencies for the projects under test.
 # Trade-off: O(all native) builds vs. O(affected native) — acceptable while the number
 # of native projects stays small and each has a pure-Python fallback.
 # DISSECT_FORCE_NATIVE causes native projects to fail (not skip) if the .so is unavailable.
@@ -265,7 +265,7 @@ test-native-affected ref="origin/main" env=default_python:
     just build-all-native-inplace {{env}}
     DISSECT_FORCE_NATIVE=1 just test-affected {{ref}} {{env}}
 
-# Build native wheels (abi3 + free-threaded) for a single package via cibuildwheel.
+# Build native wheels (abi3 + free-threaded) for a single project via cibuildwheel.
 # Runs abi3audit on the produced abi3 wheels to verify stable-ABI compliance.
 # Python versions are taken from [tool.monorepo.test] python-versions.
 # archs: value for CIBW_ARCHS — "auto" means host arch only; space-separated list enables
@@ -307,10 +307,10 @@ build-native-wheels pkg archs="auto":
 # Build native wheels for all native projects, or a caller-specified subset.
 # archs: "auto" for host arch only (suitable for PRs); space-separated list for
 #        multi-arch builds (caller must configure QEMU first for non-native arches).
-# packages: space-separated package names, or 'all' to build every native package.
-# Example: just test-native-wheels                               # host arch only, all native packages
+# packages: space-separated project names, or 'all' to build every native project.
+# Example: just test-native-wheels                               # host arch only, all native projects
 # Example: just test-native-wheels "x86_64 i686 aarch64"          # multi-arch (nightly/release)
-# Example: just test-native-wheels auto "dissect.util dissect.fve" # specific packages only
+# Example: just test-native-wheels auto "dissect.util dissect.fve" # specific projects only
 test-native-wheels archs="auto" packages="all":
     #!/usr/bin/env bash
     set -euo pipefail

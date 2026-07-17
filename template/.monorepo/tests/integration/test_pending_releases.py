@@ -1,6 +1,6 @@
 """Integration tests for the 'just pending-releases' recipe.
 
-Verifies that just pending-releases correctly identifies packages
+Verifies that just pending-releases correctly identifies projects
 whose current version has no matching git tag (``<name>/<version>``).
 """
 
@@ -46,7 +46,7 @@ def _add_tag(monorepo, name, version):
 
 
 def test_package_pending_when_untagged(monorepo):
-    """All packages appear as pending when no release tags exist."""
+    """All projects appear as pending when no release tags exist."""
     _clear_tags(monorepo)
     result = _run_pending_releases(monorepo, "--names")
     assert result.returncode == 0, result.stderr
@@ -56,7 +56,7 @@ def test_package_pending_when_untagged(monorepo):
 
 
 def test_tagged_package_not_in_pending_list(monorepo):
-    """A package with a matching release tag does not appear as pending."""
+    """A project with a matching release tag does not appear as pending."""
     _clear_tags(monorepo)
     name = "dissect.util"
     _add_tag(monorepo, name, _version(monorepo, name))
@@ -68,7 +68,7 @@ def test_tagged_package_not_in_pending_list(monorepo):
 
 
 def test_other_packages_still_pending_after_single_tag(monorepo):
-    """Tagging one package does not mark others as released."""
+    """Tagging one project does not mark others as released."""
     _clear_tags(monorepo)
     _add_tag(monorepo, "dissect.util", _version(monorepo, "dissect.util"))
 
@@ -89,7 +89,7 @@ def test_table_output_shows_tagged_and_pending(monorepo):
 
 
 def test_tagged_with_alternate_patch_form(monorepo):
-    """A package tagged as M.m.0 is not pending when pyproject.toml records M.m, and vice versa."""
+    """A project tagged as M.m.0 is not pending when pyproject.toml records M.m, and vice versa."""
     _clear_tags(monorepo)
     name = "dissect.util"
     toml_path = monorepo / "projects" / name / "pyproject.toml"

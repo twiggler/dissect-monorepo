@@ -59,7 +59,7 @@ def test_transitive_dependents_isolated():
 
 def test_transitive_dependents_direct_only():
     # b depends on a; changing a should pull in b but not c
-    # reverse[x] = set of packages that depend on x
+    # reverse[x] = set of projects that depend on x
     reverse = {"a": {"b"}, "b": set(), "c": set()}
     assert af.transitive_dependents({"a"}, reverse) == {"a", "b"}
 
@@ -138,7 +138,7 @@ def test_build_reverse_graph_optional_deps(tmp_path):
 
 
 def test_build_reverse_graph_no_self_loop(tmp_path):
-    # A package listing itself as a dependency should not create a self-loop:
+    # A project listing itself as a dependency should not create a self-loop:
     #
     #   Dependency graph (forward):  pkg-a --> pkg-a  (self-reference)
     #   Reverse graph:               pkg-a --> {}      (self-loop suppressed)

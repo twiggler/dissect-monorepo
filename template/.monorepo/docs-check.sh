@@ -2,7 +2,7 @@
 # Build the Sphinx API-reference docs for every project that has a tests/_docs/
 # directory and fail if sphinx-build emits any warnings.
 #
-# All workspace packages must already be installed as editable (--all-packages)
+# All workspace projects must already be installed as editable (--all-packages)
 # so that autoapi can resolve imports across sibling projects. This is handled
 # by the caller (just docs-check / CI step).
 

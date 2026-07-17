@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs native in-place tests for the affected packages, or all packages when no base ref
+# Runs native in-place tests for the affected projects, or all projects when no base ref
 # is available. Builds all native extensions first, then delegates to run-tests.sh logic
 # with DISSECT_FORCE_NATIVE set (via test-native-all / test-native-affected).
 #

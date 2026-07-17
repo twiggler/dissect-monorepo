@@ -4,7 +4,7 @@
 
 [dissect-docs](https://github.com/fox-it/dissect-docs) is the Sphinx-based documentation
 site that covers the entire Dissect ecosystem. It currently lives as a standalone
-repository and uses git submodules to pull in all documented packages at build time.
+repository and uses git submodules to pull in all documented projects at build time.
 Migrating it into the monorepo was considered as part of the monorepo migration project.
 After analysis that integration was ruled out. This document explains why.
 
@@ -12,7 +12,7 @@ After analysis that integration was ruled out. This document explains why.
 
 ### Reason 1: Conceptual mismatch — dissect-docs covers projects outside the monorepo
 
-The monorepo contains `dissect.*` packages. However, dissect-docs also documents two
+The monorepo contains `dissect.*` projects. However, dissect-docs also documents two
 projects that are outside the `dissect.*` namespace and have no plans to be moved into
 the monorepo: **acquire** and **flow.record**. Both are maintained in their own
 repositories and are independent enough that including them in the monorepo would
@@ -42,11 +42,11 @@ moving away from trunk-based development.
 **`stable` relies on semver tag heuristics that break on namespaced tags.** RTD
 automatically promotes the most recent tag that looks like a version number to the
 `stable` alias. The monorepo uses namespaced tags of the form `dissect.target/3.12.0`
-to associate each release with its package. RTD's heuristic does not recognise this
+to associate each release with its project. RTD's heuristic does not recognise this
 scheme, so `stable` would either point to the wrong thing or not be updated at all.
 
 **The monorepo generates hundreds of tags.** RTD discovers versions by scanning all
-tags in the repository. With 30+ packages each receiving independent releases, the
+tags in the repository. With 30+ projects each receiving independent releases, the
 RTD version list would accumulate hundreds of entries (e.g. `dissect.target/3.12.0`,
 `dissect.cstruct/4.1.0`, ...) — none of which correspond to a meaningful documentation
 version.
@@ -88,8 +88,8 @@ repository's own maintenance work, independently of any monorepo decision.
 ### Action: dissect-docs needs to be updated to reference the monorepo
 
 After the monorepo migration is complete, the individual `dissect.*` source repositories
-will stop being the canonical location for each package's source code. The dissect-docs
-repository currently includes each package as a git submodule pointing to the individual
+will stop being the canonical location for each project's source code. The dissect-docs
+repository currently includes each project as a git submodule pointing to the individual
 repositories. Those submodules will need to be replaced with a single submodule pointing
 to the monorepo, and the `conf.py` path configuration will need to be updated to reflect
 the monorepo's `projects/<pkg>/src/` layout.

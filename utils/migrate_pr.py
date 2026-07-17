@@ -3,7 +3,7 @@
 # requires-python = ">=3.11"
 # dependencies = ["httpx"]
 # ///
-"""Migrate an open PR from a per-package repo to the dissect monorepo.
+"""Migrate an open PR from a per-project repo to the dissect monorepo.
 
 Usage:
     uv run utils/migrate_pr.py <pr-url> [--monorepo-path PATH] [--dry-run]
@@ -25,12 +25,12 @@ import httpx
 
 GITHUB_API = "https://api.github.com"
 
-# Files that exist in the old per-package repos but have no place in the monorepo.
+# Files that exist in the old per-project repos but have no place in the monorepo.
 # Changes to these files in migrated PRs are dropped and noted in the PR body.
 #
 # tox.ini        — test runner config, replaced by the Justfile / uv in the monorepo.
 # pyproject.toml — was heavily edited during migration (new build backend, dependency
-#                  groups, tool config); applying old per-package changes on top of the
+#                  groups, tool config); applying old per-project changes on top of the
 #                  migrated version would almost certainly conflict or be incorrect.
 DROP_FILES = frozenset({"tox.ini", "pyproject.toml"})
 
@@ -344,7 +344,7 @@ def build_pr_body(
         f"{body}\n"
         f"\n---\n\n"
         f"**Migration notes**\n\n"
-        f"- Package: `{package_name}`\n"
+        f"- Project: `{package_name}`\n"
         f"- Original base branch: `{original_base_ref}`"
         f"{dropped_section}"
         f"{warnings_section}\n"
@@ -372,7 +372,7 @@ def normalize_package_name(repo: str) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Migrate an open GitHub PR from a per-package repo to the dissect monorepo. "
+            "Migrate an open GitHub PR from a per-project repo to the dissect monorepo. "
             "Always run with --dry-run first."
         )
     )

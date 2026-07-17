@@ -140,7 +140,7 @@ def test_package_version_unknown_exits_nonzero(capsys):
 
 
 def test_package_version_canonical_lookup(capsys):
-    """Hyphenated name resolves to the same package as the dotted form."""
+    """Hyphenated name resolves to the same project as the dotted form."""
     with patch.object(bv, "_read_workspace_packages", return_value=_FAKE_WORKSPACE):
         rc = bv.cmd_package_version(argparse.Namespace(packages=["dissect-util"]))
     assert rc == 0

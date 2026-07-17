@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs tests for the affected packages, or all packages when no base ref is available.
+# Runs tests for the affected projects, or all projects when no base ref is available.
 #
 # Expected environment variables (set via the step's env: block):
 #   BASE_REF   — output from compute-base-ref.sh; empty triggers test-all

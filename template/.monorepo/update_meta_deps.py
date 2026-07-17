@@ -7,11 +7,11 @@
 # ]
 # ///
 """
-Regenerate the dependency list of the dissect meta-package.
+Regenerate the dependency list of the dissect meta-project.
 
 Iterates over the existing entries in projects/dissect/pyproject.toml
 [project.dependencies] and updates the version pin of each entry to match
-the current version declared in that package's own pyproject.toml.
+the current version declared in that project's own pyproject.toml.
 
 Only existing entries are modified — the script never adds or removes
 dependencies. Extras (e.g. dissect.target[full]) are preserved.

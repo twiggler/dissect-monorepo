@@ -7,11 +7,11 @@
 # ///
 """
 Given a list of changed file paths on stdin (one per line, e.g. from
-`git diff --name-only`), print the names of all workspace packages that are
-affected — i.e. directly changed or transitively depend on a changed package.
+`git diff --name-only`), print the names of all workspace projects that are
+affected — i.e. directly changed or transitively depend on a changed project.
 
-Prints one package name per line to stdout.
-If a changed file matches a global-trigger pattern, ALL packages are printed.
+Prints one project name per line to stdout.
+If a changed file matches a global-trigger pattern, ALL projects are printed.
 
 Usage:
     git diff --name-only origin/main | uv run --group dev python .monorepo/affected_tests.py
@@ -26,7 +26,7 @@ from packaging.utils import canonicalize_name
 
 PROJECTS_DIR = Path("projects")
 
-# Any changed file matching one of these patterns causes every package to be
+# Any changed file matching one of these patterns causes every project to be
 # tested.  Patterns are matched against repo-root-relative POSIX paths using
 # PurePosixPath.match(), which supports ** wildcards.
 GLOBAL_TRIGGER_PATTERNS: tuple[str, ...] = (
@@ -47,7 +47,7 @@ def is_global_trigger(changed_files: list[str]) -> bool:
 
 
 def load_workspace_packages() -> dict[str, tuple[str, Path]]:
-    """Return {normalized_name: (original_name, project_dir)} for every package under projects/."""
+    """Return {normalized_name: (original_name, project_dir)} for every project under projects/."""
     packages: dict[str, tuple[str, Path]] = {}
     for pkg_dir in sorted(PROJECTS_DIR.iterdir()):
         pyproject = pkg_dir / "pyproject.toml"
@@ -61,7 +61,7 @@ def load_workspace_packages() -> dict[str, tuple[str, Path]]:
 
 
 def build_reverse_graph(workspace: dict[str, tuple[str, Path]]) -> dict[str, set[str]]:
-    """Return reverse[pkg] = set of workspace packages that directly depend on pkg."""
+    """Return reverse[pkg] = set of workspace projects that directly depend on pkg."""
     reverse: dict[str, set[str]] = {name: set() for name in workspace}
 
     for name, (_, pkg_dir) in workspace.items():
@@ -89,7 +89,7 @@ def build_reverse_graph(workspace: dict[str, tuple[str, Path]]) -> dict[str, set
 
 
 def transitive_dependents(changed: set[str], reverse: dict[str, set[str]]) -> set[str]:
-    """Return `changed` plus every package that transitively depends on any of them."""
+    """Return `changed` plus every project that transitively depends on any of them."""
     affected = set(changed)
     queue = list(changed)
     while queue:

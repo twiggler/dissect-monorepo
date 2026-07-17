@@ -75,7 +75,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Update a dependency's version specifier across all workspace projects."
     )
-    parser.add_argument("package", help="Package name to update (e.g. dissect.cstruct)")
+    parser.add_argument("package", help="Project name to update (e.g. dissect.cstruct)")
     parser.add_argument("specifier", help="New version specifier (e.g. '>=4.7,<5')")
     args = parser.parse_args()
 

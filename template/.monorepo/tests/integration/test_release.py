@@ -1,7 +1,7 @@
 """Integration tests for release_pure.sh with a mock PyPI (pypiserver).
 
 Verifies that release_pure.sh:
-- Builds the package and publishes it to the configured index
+- Builds the project and publishes it to the configured index
 - Creates the correct git tag and pushes it after a successful publish
 """
 
@@ -171,7 +171,7 @@ def test_release_publishes_and_creates_tag(monorepo, pypiserver_instance, mock_o
     )
     assert result.returncode == 0, result.stderr
 
-    # A distribution file for the package must have been uploaded.
+    # A distribution file for the project must have been uploaded.
     normalised = name.replace(".", "_").replace("-", "_")
     dists = list(packages_dir.rglob(f"{normalised}-*"))
     assert dists, f"No dist file found under {packages_dir}; contents: {list(packages_dir.iterdir())}"

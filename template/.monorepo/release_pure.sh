@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# release_pure.sh — build, publish, and tag pending workspace packages.
+# release_pure.sh — build, publish, and tag pending workspace projects.
 #
-# Builds an sdist (and for pure-Python packages, a wheel) via `uv build`, publishes via
+# Builds an sdist (and for pure-Python projects, a wheel) via `uv build`, publishes via
 # `uv publish --skip-existing`, then pushes namespaced git tags.
 #
-# For native (Rust) packages the binary wheels are expected to already be on PyPI,
+# For native (Rust) projects the binary wheels are expected to already be on PyPI,
 # uploaded by the per-platform runners in release-native.yml. This script only adds
 # the sdist alongside them; --skip-existing means it won't re-upload wheels.
 #
 # Usage:
-#   .monorepo/release_pure.sh <package> [<package> ...] [--index <name>]
+#   .monorepo/release_pure.sh <project> [<project> ...] [--index <name>]
 #   .monorepo/release_pure.sh all [--index <name>]
 #
 # --index defaults to "pypi". Use "--index testpypi" for TestPyPI.
@@ -40,7 +40,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ ${#raw_packages[@]} -eq 0 ]]; then
-    echo "error: specify package names or 'all'" >&2
+    echo "error: specify project names or 'all'" >&2
     exit 1
 fi
 
@@ -54,7 +54,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Filter to pending packages only
+# Filter to pending projects only
 # ---------------------------------------------------------------------------
 mapfile -t pending_all < <(uv run --python "$TOOLING_PYTHON" .monorepo/bump_version.py pending-releases --names)
 
@@ -72,15 +72,15 @@ if [[ ${#to_release[@]} -eq 0 ]]; then
     exit 0
 fi
 
-echo "Packages to release: ${to_release[*]}"
+echo "Projects to release: ${to_release[*]}"
 echo
 
 # ---------------------------------------------------------------------------
-# If the dissect meta-package is in the release set, sync its dep pins first
+# If the dissect meta-project is in the release set, sync its dep pins first
 # ---------------------------------------------------------------------------
 for pkg in "${to_release[@]}"; do
     if [[ "$pkg" == "dissect" ]]; then
-        echo "--- Updating dissect meta-package dependency pins ---"
+        echo "--- Updating dissect meta-project dependency pins ---"
         uv run --python "$TOOLING_PYTHON" .monorepo/update_meta_deps.py
         echo
         break
@@ -88,12 +88,12 @@ for pkg in "${to_release[@]}"; do
 done
 
 # ---------------------------------------------------------------------------
-# Build phase — all packages must build before any are published
+# Build phase — all projects must build before any are published
 # ---------------------------------------------------------------------------
 echo "=== Build phase ==="
 declare -A dist_dirs
 for pkg in "${to_release[@]}"; do
-    [[ "$pkg" =~ ^[a-zA-Z0-9._-]+$ ]] || { echo "error: invalid package name: $pkg" >&2; exit 1; }
+    [[ "$pkg" =~ ^[a-zA-Z0-9._-]+$ ]] || { echo "error: invalid project name: $pkg" >&2; exit 1; }
     out="dist/${pkg}"
     mkdir -p "$out"
     find "$out" -mindepth 1 -delete
@@ -105,7 +105,7 @@ done
 echo
 
 # ---------------------------------------------------------------------------
-# Collect name/version for each package (needed for tagging)
+# Collect name/version for each project (needed for tagging)
 # ---------------------------------------------------------------------------
 declare -A versions
 while IFS=' ' read -r name ver; do versions["$name"]="$ver"; done \
@@ -134,4 +134,4 @@ for pkg in "${to_release[@]}"; do
 done
 
 echo
-echo "Released ${#to_release[@]} package(s)."
+echo "Released ${#to_release[@]} project(s)."

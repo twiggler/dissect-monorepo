@@ -2,11 +2,11 @@
 
 Verifies that just bump-patch:
 - Increments only the patch component, preserving major.minor
-- Refuses to bump a package whose current version has no release tag (double-bump guard)
-- Refuses to bump a package with no new commits since its last release tag
+- Refuses to bump a project whose current version has no release tag (double-bump guard)
+- Refuses to bump a project with no new commits since its last release tag
 - Rejects a batch bump when any target is untagged
 - Rejects a batch bump when any target has no new commits
-- Rejects 'auto' as the package argument
+- Rejects 'auto' as the project argument
 """
 
 import subprocess
@@ -62,14 +62,14 @@ def test_bump_patch_increments_patch_component(monorepo):
 
 
 def test_bump_patch_double_bump_guard_rejects_untagged(monorepo):
-    """bump-patch refuses to bump a package whose current version has no release tag."""
+    """bump-patch refuses to bump a project whose current version has no release tag."""
     result = _run_bump_patch(monorepo, "dissect.util")
     assert result.returncode != 0
     assert "no release tag" in result.stderr
 
 
 def test_bump_patch_double_bump_guard_rejects_stale_tag(monorepo):
-    """bump-patch refuses to bump a package that has a tag for an older version but not the current one."""
+    """bump-patch refuses to bump a project that has a tag for an older version but not the current one."""
     name = "dissect.util"
     _add_tag(monorepo, name, "0.0.0")
 
@@ -79,7 +79,7 @@ def test_bump_patch_double_bump_guard_rejects_stale_tag(monorepo):
 
 
 def test_bump_patch_errors_if_no_new_commits(monorepo):
-    """bump-patch refuses to bump a tagged package with no new commits since the tag."""
+    """bump-patch refuses to bump a tagged project with no new commits since the tag."""
     name = "dissect.util"
     _add_tag(monorepo, name, _version(monorepo, name))
 
@@ -90,7 +90,7 @@ def test_bump_patch_errors_if_no_new_commits(monorepo):
 
 
 def test_bump_patch_batch_rejects_if_any_target_untagged(monorepo):
-    """In a batch patch-bump, a single untagged package causes the whole operation to fail."""
+    """In a batch patch-bump, a single untagged project causes the whole operation to fail."""
     _add_tag(monorepo, "dissect.util", _version(monorepo, "dissect.util"))
 
     result = _run_bump_patch(monorepo, "dissect.util", "dissect.cstruct")
@@ -99,7 +99,7 @@ def test_bump_patch_batch_rejects_if_any_target_untagged(monorepo):
 
 
 def test_bump_patch_batch_rejects_if_any_target_has_no_new_commits(monorepo):
-    """In a batch patch-bump, a single package with no new commits causes the whole operation to fail."""
+    """In a batch patch-bump, a single project with no new commits causes the whole operation to fail."""
     _add_tag(monorepo, "dissect.util", _version(monorepo, "dissect.util"))
     _add_commit(monorepo, "dissect.util")
     _add_tag(monorepo, "dissect.cstruct", _version(monorepo, "dissect.cstruct"))
