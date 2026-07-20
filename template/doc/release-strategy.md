@@ -137,7 +137,7 @@ These are **repository-level** secrets (not environment secrets) because they ar
 
 Setup: create a GitHub App (it can be scoped to a single repository), install it on the monorepo, grant it **Contents: Read & Write** permission, generate a private key, then store the app ID and private key as repository secrets named `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`.
 
-The `index` input maps directly to a **GitHub environment** of the same name (`pypi` or `testpypi`). Environments serve two purposes here: they act as deployment gates (the `pypi` environment can be configured to require a manual review before proceeding) and they scope secrets — `UV_PUBLISH_TOKEN` is stored per-environment so that the testpypi token cannot accidentally be used to publish to pypi and vice versa.
+The `index` input maps to a **GitHub environment** named `<index>_publish` (`pypi_publish` or `testpypi_publish`). Environments serve two purposes here: they act as deployment gates (the `pypi_publish` environment can be configured to require a manual review before proceeding) and they scope secrets — `UV_PUBLISH_TOKEN` is stored per-environment so that the testpypi token cannot accidentally be used to publish to pypi and vice versa.
 
 **Authentication strategy — dual-mode**
 
@@ -156,28 +156,7 @@ OIDC Trusted Publishing remains available as a zero-credential fallback: once a 
 
 **Pending user actions — environment and secret setup**
 
-Create both GitHub environments and add secrets via the repository Settings → Environments UI, or via `gh api`:
-
-```bash
-# Create environments
-gh api repos/OWNER/REPO/environments/pypi -X PUT
-gh api repos/OWNER/REPO/environments/testpypi -X PUT
-```
-
-Then for each environment, add a `UV_PUBLISH_TOKEN` secret containing an account-scoped API token created at pypi.org / test.pypi.org → Account Settings → API tokens. Optionally add Required Reviewers to the `pypi` environment for a manual approval gate before production releases.
-
-Additionally, create a GitHub App and add its credentials as **repository-level** secrets (Settings → Secrets and variables → Actions):
-
-1. Go to GitHub → Settings → Developer settings → GitHub Apps → New GitHub App.
-2. Scope it to the monorepo only, grant **Repository permissions: Contents = Read & Write**, and disable everything else.
-3. After creation, note the **App ID** shown on the app's settings page.
-4. Generate a private key (bottom of the app settings page) and download the `.pem` file.
-5. Install the app on the monorepo repository.
-6. Add two repository secrets:
-   - `RELEASE_APP_ID` — the numeric App ID
-   - `RELEASE_APP_PRIVATE_KEY` — the full contents of the downloaded `.pem` file
-
-Without these secrets, tags pushed by `release.yml` will not trigger `release-native.yml` (see Authentication strategy above for the full explanation).
+The one-time setup of the GitHub environments (`pypi_publish` / `testpypi_publish`), the `UV_PUBLISH_TOKEN` secrets, and the release GitHub App is described step by step in [setup.md](setup.md). Without that setup, releases cannot authenticate to PyPI and tags pushed by `release.yml` will not trigger `release-native.yml` (see Authentication strategy above for the full explanation).
 
 
 ---
@@ -263,7 +242,7 @@ The `.monorepo/resolve_linux_archs.py` script reads these lists, derives the cor
 
 #### Pending setup for native projects
 
-- **PyPI Trusted Publishers** (recommended): configure a Trusted Publisher for each native project on pypi.org under Account → Publishing. Without this, `UV_PUBLISH_TOKEN` must be set in the `pypi` / `testpypi` GitHub environments (already required for pure-Python projects — the same token covers native projects too).
+- **PyPI Trusted Publishers** (recommended): configure a Trusted Publisher for each native project on pypi.org under Account → Publishing. Without this, `UV_PUBLISH_TOKEN` must be set in the `pypi_publish` / `testpypi_publish` GitHub environments (already required for pure-Python projects — the same token covers native projects too).
 
 
 ### Pending user actions

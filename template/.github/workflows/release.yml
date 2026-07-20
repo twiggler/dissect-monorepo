@@ -29,9 +29,9 @@ env:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Each index maps to a GitHub environment of the same name.
+    # Each index maps to a GitHub environment named <index>_publish (pypi_publish / testpypi_publish).
     # Store a PyPI API token as UV_PUBLISH_TOKEN in each environment's secrets.
-    environment: ${{ inputs.index }}_release
+    environment: ${{ inputs.index }}_publish
     permissions:
       id-token: write  # OIDC Trusted Publishing (used when UV_PUBLISH_TOKEN is not set)
       contents: write  # push git tags

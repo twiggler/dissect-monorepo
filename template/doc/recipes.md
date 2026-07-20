@@ -51,9 +51,9 @@ Running releases through the workflow is strongly preferred for three reasons:
 
 - **Security** — publishing credentials never leave GitHub. The workflow authenticates via an environment-scoped `UV_PUBLISH_TOKEN` secret (or OIDC Trusted Publishing), so no PyPI token needs to live on, or be exported from, a developer's machine.
 - **Isolation** — each release runs on a clean, ephemeral CI runner from a known-good checkout of the default branch, eliminating "works on my machine" state such as stray local edits, uncommitted files, or a dirty virtual environment.
-- **Auditing** — every release is a recorded workflow run with a timestamp, the triggering user, the exact inputs, and full logs. The `pypi` environment can additionally require a manual approval gate, and a concurrency lock guarantees only one release runs at a time.
+- **Auditing** — every release is a recorded workflow run with a timestamp, the triggering user, the exact inputs, and full logs. The `pypi_publish` environment can additionally require a manual approval gate, and a concurrency lock guarantees only one release runs at a time.
 
-See [release-strategy.md](release-strategy.md) for the full design rationale, authentication modes, and required secrets.
+Before the first release, complete the one-time environment, token, and GitHub App setup described in [setup.md](setup.md). See [release-strategy.md](release-strategy.md) for the full design rationale, authentication modes, and required secrets.
 
 #### Releasing via the workflow (recommended)
 

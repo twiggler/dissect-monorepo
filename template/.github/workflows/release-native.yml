@@ -80,7 +80,7 @@ jobs:
     needs: [prepare, build-wheels]
     runs-on: ubuntu-latest
     environment:
-      name: ${{ needs.prepare.outputs.index }}_release
+      name: ${{ needs.prepare.outputs.index }}_publish
       url: ${{ needs.prepare.outputs.index == 'pypi' && 'https://pypi.org' || 'https://test.pypi.org' }}
     permissions:
       id-token: write   # OIDC Trusted Publishing
