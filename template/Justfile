@@ -162,28 +162,38 @@ sync env=default_python:
 # --all-extras ensures optional dependencies (e.g. backports.zstd) are available.
 # -n auto (pytest-xdist): distributes tests across one worker process per CPU core.
 #   Tests run concurrently; order is non-deterministic; each worker is a fresh subprocess.
+# Extra pytest args follow project+env and are forwarded verbatim; quoting is preserved
+# via [positional-arguments], so expressions with spaces work without extra quoting
+# (env must be given explicitly to pass extra args, since it precedes them).
 # Example: just test dissect.xfs 3.11
-# Example: just test dissect.xfs 3.11 "-k test_foo"
-test project env=default_python args="":
+# Example: just test dissect.xfs 3.11 -k test_foo
+# Example: just test dissect.xfs 3.11 -k "serialize and not slow"
+[positional-arguments]
+test project env=default_python *args:
     #!/usr/bin/env bash
     set -uo pipefail
+    shift 2  # drop project + env; "$@" is now just the extra pytest args
     uv run --group dev --all-packages --all-extras --python {{env}} \
-        pytest -n auto projects/{{project}} {{args}} \
+        pytest -n auto projects/{{project}} "$@" \
         || exit_code=$?
     # Exit code 5 means no tests were collected — not a failure.
     [ "${exit_code:-0}" -eq 5 ] || exit "${exit_code:-0}"
 
 # Run pytest for every project using the given Python version.
 # Skips directories that don't have a pyproject.toml.
-# Pass extra pytest args via 'args', e.g.: just test-all 3.10 "-k test_foo"
-test-all env=default_python args="":
+# Extra pytest args follow env and are forwarded verbatim (quoting preserved).
+# Example: just test-all 3.10 -k test_foo
+# Example: just test-all 3.10 -k "serialize and not slow"
+[positional-arguments]
+test-all env=default_python *args:
     #!/usr/bin/env bash
     set -euo pipefail
+    shift 1  # drop env; "$@" is now just the extra pytest args
     for d in projects/*; do
         if [ -f "$d/pyproject.toml" ]; then
             project_name=$(basename "$d")
             echo "--- Running tests for $project_name with Python {{env}} ---"
-            just test "$project_name" {{env}} {{args}}
+            just test "$project_name" {{env}} "$@"
         fi
     done
 
@@ -241,11 +251,17 @@ build-all-native-inplace env=default_python:
 
 # Compile the Rust extension in-place and run pytest with DISSECT_FORCE_NATIVE set.
 # Fails (not skips) if the compiled extension cannot be imported.
+# Extra pytest args follow project+env and are forwarded verbatim (quoting preserved).
 # Example: just test-native dissect.util 3.12
-# Example: just test-native dissect.util 3.12 "-k test_lz4"
-test-native project env=default_python args="":
+# Example: just test-native dissect.util 3.12 -k test_lz4
+# Example: just test-native dissect.util 3.12 -k "lz4 or zstd"
+[positional-arguments]
+test-native project env=default_python *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    shift 2  # drop project + env; "$@" is now just the extra pytest args
     just build-native-inplace {{project}} {{env}}
-    DISSECT_FORCE_NATIVE=1 just test {{project}} {{env}} {{args}}
+    DISSECT_FORCE_NATIVE=1 just test {{project}} {{env}} "$@"
 
 # Build all native extensions in-place, then run the full test suite across every project.
 # DISSECT_FORCE_NATIVE causes native projects to fail (not skip) if the .so is unavailable.
