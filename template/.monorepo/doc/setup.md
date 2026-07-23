@@ -69,7 +69,7 @@ and fill in:
 | Owner | `OWNER` |
 | Repository name | `REPO` |
 | Workflow name | `release.yml` |
-| Environment name | `pypi_publish` (on PyPI) / `testpypi_publish` (on TestPyPI) |
+| Environment name | `production_publish` (on the production index) / `test_publish` (on the test index) |
 
 
 > **Fallback — account-scoped API token.** If you prefer not to register a Trusted Publisher per
@@ -84,42 +84,50 @@ and fill in:
 
 ## 3. Create the publish environments
 
-Each `index` input maps to a GitHub environment named `<index>_publish`. Both environments are
-**required regardless of which authentication mode you use**: the environment name is part of the
-Trusted Publisher configuration in step 2, and it also scopes any secrets and gates production
-releases.
+The workflow's `target` input is a **release role** (`production` or `test`), not a raw index name.
+Each role maps to a GitHub environment named `<role>_publish` and, via `[tool.monorepo.release]` in
+the root `pyproject.toml`, to a `[[tool.uv.index]]` name that receives the artifacts:
 
-Via the UI: **Settings → Environments → New environment** (`pypi_publish` and `testpypi_publish`).
+| Role | Environment | Default index (`[tool.monorepo.release]`) |
+|---|---|---|
+| `production` | `production_publish` | `production-index` (`pypi`) |
+| `test` | `test_publish` | `test-index` (`testpypi`) |
+
+Both environments are **required regardless of which authentication mode you use**: the environment
+name is part of the Trusted Publisher configuration in step 2, and it also scopes any secrets and
+gates production releases.
+
+Via the UI: **Settings → Environments → New environment** (`production_publish` and `test_publish`).
 
 Via `gh`:
 
 ```bash
-gh api repos/OWNER/REPO/environments/pypi_publish -X PUT
-gh api repos/OWNER/REPO/environments/testpypi_publish -X PUT
+gh api repos/OWNER/REPO/environments/production_publish -X PUT
+gh api repos/OWNER/REPO/environments/test_publish -X PUT
 ```
 
 **Trusted Publishing (recommended):** no further secrets are needed — leave `UV_PUBLISH_TOKEN` unset
 and the workflow authenticates via OIDC.
 
 **Token fallback:** if you minted account-scoped tokens in step 2, store the matching token as a
-`UV_PUBLISH_TOKEN` secret in each environment. Per-environment scoping ensures the TestPyPI token can
-never be used to publish to PyPI and vice versa.
+`UV_PUBLISH_TOKEN` secret in each environment. Per-environment scoping ensures the test-index token
+can never be used to publish to the production index and vice versa.
 
 ```bash
-gh secret set UV_PUBLISH_TOKEN --repo OWNER/REPO --env pypi_publish --body "<pypi token>"
-gh secret set UV_PUBLISH_TOKEN --repo OWNER/REPO --env testpypi_publish --body "<testpypi token>"
+gh secret set UV_PUBLISH_TOKEN --repo OWNER/REPO --env production_publish --body "<production token>"
+gh secret set UV_PUBLISH_TOKEN --repo OWNER/REPO --env test_publish --body "<test token>"
 ```
 
 | Environment | Secret | Value |
 |---|---|---|
-| `pypi_publish` | `UV_PUBLISH_TOKEN` | PyPI account-scoped API token (token fallback only) |
-| `testpypi_publish` | `UV_PUBLISH_TOKEN` | TestPyPI account-scoped API token (token fallback only) |
+| `production_publish` | `UV_PUBLISH_TOKEN` | Production-index account-scoped API token (token fallback only) |
+| `test_publish` | `UV_PUBLISH_TOKEN` | Test-index account-scoped API token (token fallback only) |
 
 ## 4. Optional: require manual approval for production
 
 To add an approval gate before production releases, configure **Required reviewers** on the
-`pypi_publish` environment (**Settings → Environments → `pypi_publish` → Required reviewers**).
-Releases to `testpypi_publish` remain ungated for fast dry runs.
+`production_publish` environment (**Settings → Environments → `production_publish` → Required
+reviewers**). Releases to `test_publish` remain ungated for fast dry runs.
 
 ## 5. Verify
 
@@ -129,11 +137,12 @@ Releases to `testpypi_publish` remain ungated for fast dry runs.
    ```
    If you are using the token fallback, also confirm the per-environment token is present:
    ```bash
-   gh secret list --repo OWNER/REPO --env pypi_publish
-   gh secret list --repo OWNER/REPO --env testpypi_publish
+   gh secret list --repo OWNER/REPO --env production_publish
+   gh secret list --repo OWNER/REPO --env test_publish
    ```
    With Trusted Publishing these environment listings are empty — that is expected.
-2. Run a dry run: **Actions → Release → Run workflow** with `index = testpypi`. The run should
-   publish to TestPyPI and push a namespaced tag. If it authenticated via OIDC, confirm the
-   TestPyPI Trusted Publisher shows a recent successful publish.
-3. For a native project, confirm the tag push automatically starts `release-native.yml`.
+2. Run a dry run: **Actions → Release → Run workflow** with `target = test`. The run should
+   publish to the test index **without** creating a tag (test releases are not tagged). If it
+   authenticated via OIDC, confirm the test-index Trusted Publisher shows a recent successful publish.
+3. For a native project, run a **production** release and confirm the tag push automatically starts
+   `release-native.yml`.

@@ -7,6 +7,7 @@ Verifies that release_pure.sh:
 
 import http.client
 import os
+import re
 import select
 import socket
 import subprocess
@@ -106,8 +107,11 @@ def pypiserver_instance(tmp_path):
 def mock_pypi_index(monorepo, pypiserver_instance):
     """Configure uv in the monorepo to publish to the local pypiserver.
 
+    Defines the local index in uv.toml and maps the 'production' release role to it via
+    [tool.monorepo.release] so that `just release --target production` targets it.
+
     Returns:
-        The name of the configured index to be passed to the release script.
+        The name of the configured index.
     """
     port, _ = pypiserver_instance
     index_name = "testlocal"
@@ -119,6 +123,19 @@ def mock_pypi_index(monorepo, pypiserver_instance):
         f'publish-url = "http://localhost:{port}"\n'
         f"explicit = true\n"
     )
+
+    # Map the production release role to the local index.
+    pyproject = monorepo / "pyproject.toml"
+    content = pyproject.read_text()
+    if re.search(r'production-index\s*=\s*"[^"]*"', content):
+        content = re.sub(r'production-index\s*=\s*"[^"]*"', f'production-index = "{index_name}"', content)
+    elif "[tool.monorepo.release]" in content:
+        content = content.replace(
+            "[tool.monorepo.release]", f'[tool.monorepo.release]\nproduction-index = "{index_name}"'
+        )
+    else:
+        content += f'\n[tool.monorepo.release]\nproduction-index = "{index_name}"\n'
+    pyproject.write_text(content)
 
     return index_name
 
@@ -162,7 +179,7 @@ def test_release_publishes_and_creates_tag(monorepo, pypiserver_instance, mock_o
     version = _version(monorepo, name)
 
     result = subprocess.run(
-        ["just", "release", name, "--index", mock_pypi_index],
+        ["just", "release", name, "--target", "production"],
         cwd=monorepo,
         capture_output=True,
         text=True,

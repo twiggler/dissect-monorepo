@@ -6,9 +6,10 @@
 #
 # Two triggers:
 #   push: tags  — automatic, one run per tag; parallel runs for simultaneous releases
-#                 are fine given the small number of native packages.
-#   workflow_dispatch — manual bulk fallback (e.g. after `just release all` to catch any
-#                       tag-triggered runs that may have been skipped by GitHub's queue).
+#                 are fine given the small number of native packages. Tags are only pushed
+#                 for production releases, so this path always targets the production index.
+#   workflow_dispatch — manual fallback (e.g. retrying a skipped tag-triggered run, or
+#                       building native wheels against the test index for validation).
 #
 # Authentication: PyPI Trusted Publishing (OIDC) — no tokens needed.
 # Configure a publisher for each native package at https://pypi.org/manage/account/publishing/
@@ -25,17 +26,18 @@ on:
         description: "Space-separated package names (or 'all'). Use as bulk fallback after 'just release all'."
         type: string
         required: true
-      index:
-        description: "Target PyPI index"
+      target:
+        description: "Release target role"
         type: choice
-        options: [pypi, testpypi]
-        default: pypi
+        options: [production, test]
+        default: production
 
 permissions: {}
 
 jobs:
-  # Derive the package name and target index from the trigger.
-  # For tag triggers: extract from github.ref_name (e.g. "dissect.util/3.5.0" → "dissect.util").
+  # Derive the package name and index from the trigger.
+  # For tag triggers: extract from github.ref_name (e.g. "dissect.util/3.5.0" → "dissect.util"),
+  # always targeting the production index (tags are only pushed for production releases).
   # For workflow_dispatch: use the inputs directly.
   prepare:
     name: Prepare
@@ -45,6 +47,7 @@ jobs:
     outputs:
       packages: ${{ steps.resolve.outputs.packages }}
       index: ${{ steps.resolve.outputs.index }}
+      target: ${{ steps.resolve.outputs.target }}
       is-native: ${{ steps.resolve.outputs.is-native }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -58,7 +61,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           REF_NAME: ${{ github.ref_name }}
           INPUT_PACKAGES: ${{ inputs.packages }}
-          INPUT_INDEX: ${{ inputs.index }}
+          INPUT_TARGET: ${{ inputs.target }}
         run: .monorepo/prepare_native_release.sh
 
   # Build wheels on all platforms and upload them as artifacts.
@@ -80,8 +83,7 @@ jobs:
     needs: [prepare, build-wheels]
     runs-on: ubuntu-latest
     environment:
-      name: ${{ needs.prepare.outputs.index }}_publish
-      url: ${{ needs.prepare.outputs.index == 'pypi' && 'https://pypi.org' || 'https://test.pypi.org' }}
+      name: ${{ needs.prepare.outputs.target }}_publish
     permissions:
       id-token: write   # OIDC Trusted Publishing
     steps:

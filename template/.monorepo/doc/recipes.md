@@ -51,7 +51,7 @@ Running releases through the workflow is strongly preferred for three reasons:
 
 - **Security** — publishing credentials never leave GitHub. The workflow authenticates via an environment-scoped `UV_PUBLISH_TOKEN` secret (or OIDC Trusted Publishing), so no PyPI token needs to live on, or be exported from, a developer's machine.
 - **Isolation** — each release runs on a clean, ephemeral CI runner from a known-good checkout of the default branch, eliminating "works on my machine" state such as stray local edits, uncommitted files, or a dirty virtual environment.
-- **Auditing** — every release is a recorded workflow run with a timestamp, the triggering user, the exact inputs, and full logs. The `pypi_publish` environment can additionally require a manual approval gate, and a concurrency lock guarantees only one release runs at a time.
+- **Auditing** — every release is a recorded workflow run with a timestamp, the triggering user, the exact inputs, and full logs. The `production_publish` environment can additionally require a manual approval gate, and a concurrency lock guarantees only one release runs at a time.
 
 Before the first release, complete the one-time environment, token, and GitHub App setup described in [setup.md](setup.md). See [release-strategy.md](release-strategy.md) for the full design rationale, authentication modes, and required secrets.
 
@@ -63,9 +63,9 @@ Before the first release, complete the one-time environment, token, and GitHub A
    ![The GitHub Actions Release workflow "Run workflow" form](release_workflow.png)
 
    - **`packages`** — a space-separated list of project names, or `all` to release every project with a pending (untagged) version.
-   - **`index`** — the target index: `pypi` (default) or `testpypi` for a dry run.
-3. Click **Run workflow**. The run publishes each pending project and pushes a namespaced git tag (`dissect.util/<version>`) per successful publish.
-4. For **native (Rust) projects**, no extra step is needed: the tag pushed in step 3 automatically triggers `release-native.yml`, which builds and publishes the platform-specific wheels.
+   - **`target`** — the release role: `production` (default) publishes to the production index, tags each project, and triggers native wheel builds; `test` publishes to the test index for an upload-validation dry run only (no tags, native wheels skipped).
+3. Click **Run workflow**. A `production` run publishes each pending project and pushes a namespaced git tag (`dissect.util/<version>`) per successful publish. A `test` run publishes without tagging.
+4. For **native (Rust) projects**, no extra step is needed on a `production` run: the tag pushed in step 3 automatically triggers `release-native.yml`, which builds and publishes the platform-specific wheels. (A `test` run does not tag, so native wheels are not built — see the note on the test index below.)
 
 #### Releasing a pure-Python project locally
 
@@ -83,10 +83,14 @@ Before the first release, complete the one-time environment, token, and GitHub A
    ```
    Commit the changes and updated `uv.lock`.
 
-3. **Dry-run to TestPyPI** (optional but recommended for a first release or structural changes):
+3. **Dry-run to the test index** (optional but recommended for a first release or structural changes):
    ```
-   just release dissect.util --index testpypi
+   just release dissect.util --target test
    ```
+   > A test release validates the **upload** path only. It does not create a git tag and does not
+   > trigger native wheel builds. Installing the package back **from the test index** will typically
+   > fail, because its `dissect.*` dependencies are not published there (siblings only exist on the
+   > production index) — add `--extra-index-url <production index>` if you need to install-test.
 
 4. **Release to PyPI**:
    ```
@@ -254,20 +258,20 @@ just test-native-wheels auto "dissect.util dissect.fve"         # specific proje
 
 ### Releasing
 
-#### `just release <packages|all> [--index testpypi]`
+#### `just release <packages|all> [--target test]`
 
 > **Prefer the release workflow.** Releases should normally be initiated through GitHub Actions (**Actions → Release**) — see [Releasing via the workflow](#releasing-via-the-workflow-recommended). Run this recipe locally only for testing or emergencies.
 
-Publish pending workspace projects to PyPI, then create and push git tags. Only pure-Python projects — native (Rust) projects are released via the `release-native.yml` GitHub Actions workflow.
+Publish pending workspace projects to the release index, then create and push git tags. Only pure-Python projects — native (Rust) projects are released via the `release-native.yml` GitHub Actions workflow.
 
-Pass `all` to release every project that has a pending (untagged) version, or list project names explicitly. Pass `--index testpypi` to publish to TestPyPI for a dry run.
+Pass `all` to release every project that has a pending (untagged) version, or list project names explicitly. `--target` defaults to `production` (tags + triggers native builds); pass `--target test` to publish to the test index for an upload-validation dry run (no tags, native wheels skipped). Roles map to `[[tool.uv.index]]` names via `[tool.monorepo.release]` in the root `pyproject.toml`.
 
 For authentication, set `UV_PUBLISH_TOKEN=<token>` locally. CI uses OIDC Trusted Publishing and needs no token.
 
 ```
 just release all
 just release dissect.util dissect.cstruct
-just release all --index testpypi
+just release all --target test
 ```
 
 #### `just bump <packages|auto>`

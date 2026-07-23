@@ -22,6 +22,13 @@ os = ["ubuntu-latest", "windows-latest"]
 linux-x86-archs-pr = ["x86_64", "i686"]
 linux-x86-archs = ["x86_64", "i686", "ppc64le", "s390x", "armv7l"]
 
+[tool.monorepo.release]
+# Maps release roles to [[tool.uv.index]] names. Releasing to the 'production' index
+# creates a git tag and triggers native wheel builds; releasing to the 'test' index is
+# an upload-validation dry run only — no tag is created and native wheels are skipped.
+production-index = "pypi"
+test-index = "testpypi"
+
 # ---------------------------------------------------------------------------
 # cibuildwheel — shared config for all native (Rust) projects.
 # Run with: cibuildwheel --config-file pyproject.toml projects/<pkg>

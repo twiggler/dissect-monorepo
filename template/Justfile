@@ -12,15 +12,17 @@ tooling_python := `cat .monorepo/tooling-python`
 default_python := "3.10"
 
 
-# Publish pending workspace projects to PyPI (or testpypi), then create and push git tags.
+# Publish pending workspace projects to a package index, then create and push git tags.
 # Pure-Python projects only — native (Rust) projects are released via the
 # release-native.yml GitHub Actions workflow.
 # Specify individual project names or 'all'.
-# Pass '--index testpypi' to publish to TestPyPI instead.
+# Pass '--target test' to publish to the test index for an upload-validation dry run
+# (no git tags are created and native wheel builds are not triggered).
+# Roles map to [[tool.uv.index]] names via [tool.monorepo.release] in pyproject.toml.
 # Authentication: set UV_PUBLISH_TOKEN=<token> locally; CI uses OIDC Trusted Publishing.
 # Example: just release all
 # Example: just release dissect.util dissect.cstruct
-# Example: just release all --index testpypi
+# Example: just release all --target test
 release +args:
     .monorepo/release_pure.sh {{args}}
 

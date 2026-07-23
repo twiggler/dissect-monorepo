@@ -9,10 +9,12 @@
 # the sdist alongside them; --skip-existing means it won't re-upload wheels.
 #
 # Usage:
-#   .monorepo/release_pure.sh <project> [<project> ...] [--index <name>]
-#   .monorepo/release_pure.sh all [--index <name>]
+#   .monorepo/release_pure.sh <project> [<project> ...] [--target <production|test>]
+#   .monorepo/release_pure.sh all [--target <production|test>]
 #
-# --index defaults to "pypi". Use "--index testpypi" for TestPyPI.
+# --target defaults to "production". The role maps to a [[tool.uv.index]] name via
+# [tool.monorepo.release] in pyproject.toml. A 'production' release is tagged; a 'test'
+# release publishes for upload validation only and is NOT tagged.
 #
 # Authentication:
 #   Local:  export UV_PUBLISH_TOKEN=<token> before running.
@@ -23,14 +25,14 @@ TOOLING_PYTHON=$(< "$(dirname "$0")/tooling-python")
 # ---------------------------------------------------------------------------
 # Argument parsing
 # ---------------------------------------------------------------------------
-index="pypi"
+role="production"
 raw_packages=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --index)
+        --target)
             shift
-            index="$1"
+            role="$1"
             ;;
         *)
             raw_packages+=("$1")
@@ -43,6 +45,9 @@ if [[ ${#raw_packages[@]} -eq 0 ]]; then
     echo "error: specify project names or 'all'" >&2
     exit 1
 fi
+
+# Resolve the release role to a concrete package index name.
+index=$(uv run --python "$TOOLING_PYTHON" .monorepo/resolve_index.py "$role")
 
 # ---------------------------------------------------------------------------
 # Expand "all"
@@ -114,7 +119,7 @@ while IFS=' ' read -r name ver; do versions["$name"]="$ver"; done \
 # ---------------------------------------------------------------------------
 # Publish phase
 # ---------------------------------------------------------------------------
-echo "=== Publish phase (index: $index) ==="
+echo "=== Publish phase (target: $role, index: $index) ==="
 for pkg in "${to_release[@]}"; do
     echo "--- Publishing $pkg ---"
     uv publish --index "$index" "${dist_dirs[$pkg]}"/*
@@ -122,8 +127,18 @@ done
 echo
 
 # ---------------------------------------------------------------------------
-# Tag + push phase
+# Tag + push phase — production releases only
 # ---------------------------------------------------------------------------
+# Tags are the canonical release ledger (pending-release detection keys off them) and
+# they trigger native wheel builds via release-native.yml. Only the production role is a
+# real release; a test release is an upload-validation dry run, so it is left untagged.
+if [[ "$role" != "production" ]]; then
+    echo "Target role '$role' is not production — skipping tag creation (test releases are not tagged)."
+    echo
+    echo "Published ${#to_release[@]} project(s) to '$index' (no tags)."
+    exit 0
+fi
+
 echo "=== Tagging ==="
 for pkg in "${to_release[@]}"; do
     version="${versions[$pkg]}"

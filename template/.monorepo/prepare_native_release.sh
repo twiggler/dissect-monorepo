@@ -8,23 +8,28 @@
 #   EVENT          — github.event_name ("push" or "workflow_dispatch")
 #   REF_NAME       — github.ref_name (tag, e.g. "dissect.util/3.5.0")
 #   INPUT_PACKAGES — projects input from workflow_dispatch
-#   INPUT_INDEX    — index input from workflow_dispatch
+#   INPUT_TARGET   — release role input from workflow_dispatch (production/test)
 #
 # Outputs:
 #   packages    — space-separated project names to build
-#   index       — target PyPI index (pypi or testpypi)
+#   index       — target index name (resolved from the release role)
+#   target      — release role (production/test)
 #   is-native   — "true" if any of the projects is a native project
 set -euo pipefail
 TOOLING_PYTHON=$(< "$(dirname "$0")/tooling-python")
 
 if [[ "$EVENT" == "push" ]]; then
     # Tag format: <project>/<version> — extract the project name.
+    # Tags are only pushed for production releases, so this path is always production.
     pkg="${REF_NAME%/*}"
-    index="pypi"
+    target="production"
 else
     pkg="$INPUT_PACKAGES"
-    index="$INPUT_INDEX"
+    target="$INPUT_TARGET"
 fi
+
+# Resolve the release role to a concrete package index name.
+index=$(uv run --python "$TOOLING_PYTHON" .monorepo/resolve_index.py "$target")
 
 # Expand "all" to the full list of native projects.
 if [[ "$pkg" == "all" ]]; then
@@ -44,4 +49,5 @@ done
 
 echo "packages=$pkg" >> "$GITHUB_OUTPUT"
 echo "index=$index" >> "$GITHUB_OUTPUT"
+echo "target=$target" >> "$GITHUB_OUTPUT"
 echo "is-native=$is_native" >> "$GITHUB_OUTPUT"

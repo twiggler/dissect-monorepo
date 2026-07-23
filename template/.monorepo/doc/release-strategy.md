@@ -116,7 +116,9 @@ Leaving the field blank in the UI releases everything pending; filling it in res
 | Input | Default | Description |
 |---|---|---|
 | `packages` | `all` | Space-separated project names, or `all` for every pending project |
-| `index` | `pypi` | Target index: `pypi` or `testpypi` |
+| `target` | `production` | Release role: `production` (tagged, triggers native wheel builds) or `test` (upload-validation dry run, not tagged, native skipped) |
+
+The `target` input is a **release role**, not a raw index name. Each role maps to a `[[tool.uv.index]]` name via `[tool.monorepo.release]` in the root `pyproject.toml` (`production-index`, default `pypi`; `test-index`, default `testpypi`). Decoupling the role from the index keeps the *semantics* (is this a real release?) separate from the *destination* (which registry), so the production role can point at any registry and only production releases are tagged. Because git tags are the canonical release ledger that pending-release detection and the native wheel trigger both key off, a `test` release deliberately publishes **without** creating a tag — it validates the upload path only.
 
 A concurrency group (`group: release`, `cancel-in-progress: false`) ensures that at most one release workflow runs at a time and that an in-progress release is never cancelled by a concurrent trigger.
 
@@ -137,7 +139,7 @@ These are **repository-level** secrets (not environment secrets) because they ar
 
 Setup: create a GitHub App (it can be scoped to a single repository), install it on the monorepo, grant it **Contents: Read & Write** permission, generate a private key, then store the app ID and private key as repository secrets named `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`.
 
-The `index` input maps to a **GitHub environment** named `<index>_publish` (`pypi_publish` or `testpypi_publish`). Environments serve two purposes here: they act as deployment gates (the `pypi_publish` environment can be configured to require a manual review before proceeding) and they scope secrets — `UV_PUBLISH_TOKEN` is stored per-environment so that the testpypi token cannot accidentally be used to publish to pypi and vice versa.
+The `target` role maps to a **GitHub environment** named `<role>_publish` (`production_publish` or `test_publish`). Environments serve two purposes here: they act as deployment gates (the `production_publish` environment can be configured to require a manual review before proceeding) and they scope secrets — `UV_PUBLISH_TOKEN` is stored per-environment so that the test-index token cannot accidentally be used to publish to the production index and vice versa.
 
 **Authentication strategy — dual-mode**
 
@@ -156,7 +158,7 @@ OIDC Trusted Publishing remains available as a zero-credential fallback: once a 
 
 **Pending user actions — environment and secret setup**
 
-The one-time setup of the GitHub environments (`pypi_publish` / `testpypi_publish`), the `UV_PUBLISH_TOKEN` secrets, and the release GitHub App is described step by step in [setup.md](setup.md). Without that setup, releases cannot authenticate to PyPI and tags pushed by `release.yml` will not trigger `release-native.yml` (see Authentication strategy above for the full explanation).
+The one-time setup of the GitHub environments (`production_publish` / `test_publish`), the `UV_PUBLISH_TOKEN` secrets, and the release GitHub App is described step by step in [setup.md](setup.md). Without that setup, releases cannot authenticate to the package index and tags pushed by `release.yml` will not trigger `release-native.yml` (see Authentication strategy above for the full explanation).
 
 
 ---
@@ -171,13 +173,15 @@ The one-time setup of the GitHub environments (`pypi_publish` / `testpypi_publis
 
 #### Relationship to pure-Python release
 
-Native projects follow the **same version management rules** as pure-Python projects (Decision 1–3) and go through the same `just release` path (Decision 4). The difference is in what happens *after* `just release`:
+Native projects follow the **same version management rules** as pure-Python projects (Decision 1–3) and go through the same `just release` path (Decision 4). The difference is in what happens *after* a **production** `just release`:
 
-1. `just release` publishes the **sdist** of each pending project to PyPI and creates a namespaced tag (e.g. `dissect.util/3.24.1`).
+1. `just release` publishes the **sdist** of each pending project to the production index and creates a namespaced tag (e.g. `dissect.util/3.24.1`).
 2. Pushing that tag **automatically triggers** `release-native.yml` via the `push: tags` trigger.
-3. That workflow builds binary wheels on all supported platforms and publishes them to PyPI alongside the sdist.
+3. That workflow builds binary wheels on all supported platforms and publishes them to the production index alongside the sdist.
 
 In other words, no developer action is needed beyond the usual `just release` — the native wheel pipeline kicks in automatically.
+
+**Native builds only run for production releases.** Because tags are pushed only for the production role (Decision 4), the `push: tags` trigger fires only for production — so native wheels are built exactly when a production tag appears, and there is no index to forward to `release-native.yml` (it always targets the production index). A `test` release publishes only the sdist for upload validation: it creates no tag and therefore builds no native wheels. (To build native wheels against the test index deliberately, dispatch `release-native.yml` manually with `target: test`.)
 
 This two-step sequence is possible because PyPI treats a release (a version number) as a container that can receive additional distribution files after the initial upload. Publishing the sdist first does not close or lock the release; `release-native.yml` can add binary wheels to the same version later without any special API access or re-release mechanics.
 
@@ -191,12 +195,12 @@ This two-step sequence is possible because PyPI treats a release (a version numb
 
 | Trigger | Use case |
 |---|---|
-| `push: tags` matching `**/[0-9]*` | Automatic — fires once per `<project>/<version>` tag pushed by `just release` |
-| `workflow_dispatch` | Manual fallback — e.g. if a tag-triggered run failed and needs to be retried, or when releasing a subset of native projects on demand |
+| `push: tags` matching `**/[0-9]*` | Automatic — fires once per `<project>/<version>` tag pushed by a production `just release`; always targets the production index |
+| `workflow_dispatch` | Manual fallback — e.g. retrying a skipped tag-triggered run, releasing a subset of native projects on demand, or building wheels against the test index (`target: test`) |
 
 The `workflow_dispatch` form accepts:
 - **`packages`** — space-separated project names or `all`
-- **`index`** — `pypi` (default) or `testpypi`
+- **`target`** — release role: `production` (default) or `test`
 
 ---
 
@@ -242,7 +246,7 @@ The `.monorepo/resolve_linux_archs.py` script reads these lists, derives the cor
 
 #### Pending setup for native projects
 
-- **PyPI Trusted Publishers** (recommended): configure a Trusted Publisher for each native project on pypi.org under Account → Publishing. Without this, `UV_PUBLISH_TOKEN` must be set in the `pypi_publish` / `testpypi_publish` GitHub environments (already required for pure-Python projects — the same token covers native projects too).
+- **PyPI Trusted Publishers** (recommended): configure a Trusted Publisher for each native project on pypi.org under Account → Publishing. Without this, `UV_PUBLISH_TOKEN` must be set in the `production_publish` / `test_publish` GitHub environments (already required for pure-Python projects — the same token covers native projects too).
 
 
 ### Pending user actions

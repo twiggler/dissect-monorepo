@@ -7,14 +7,14 @@ on:
         description: 'Package names (space-separated) or "all"'
         required: true
         default: all
-      index:
-        description: 'Package index to publish to'
+      target:
+        description: 'Release target role'
         required: true
-        default: pypi
+        default: production
         type: choice
         options:
-          - pypi
-          - testpypi
+          - production
+          - test
 
 # Only one release can run at a time; never cancel an in-progress release.
 concurrency:
@@ -29,9 +29,9 @@ env:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Each index maps to a GitHub environment named <index>_publish (pypi_publish / testpypi_publish).
-    # Store a PyPI API token as UV_PUBLISH_TOKEN in each environment's secrets.
-    environment: ${{ inputs.index }}_publish
+    # Each role maps to a GitHub environment named <role>_publish (production_publish / test_publish).
+    # Store a package-index API token as UV_PUBLISH_TOKEN in each environment's secrets.
+    environment: ${{ inputs.target }}_publish
     permissions:
       id-token: write  # OIDC Trusted Publishing (used when UV_PUBLISH_TOKEN is not set)
       contents: write  # push git tags
@@ -62,11 +62,11 @@ jobs:
         id: release
         env:
           PACKAGES: ${{ inputs.packages }}
-          INDEX: ${{ inputs.index }}
+          TARGET: ${{ inputs.target }}
           # Set only when the secret exists; absent → uv falls back to OIDC Trusted Publishing.
           UV_PUBLISH_TOKEN: ${{ secrets.UV_PUBLISH_TOKEN || '' }}
         run: |
           if [[ -z "$UV_PUBLISH_TOKEN" ]]; then unset UV_PUBLISH_TOKEN; fi
-          just release $PACKAGES --index $INDEX
+          just release $PACKAGES --target $TARGET
 
 
