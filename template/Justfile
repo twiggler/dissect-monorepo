@@ -75,7 +75,7 @@ ruff fix="false":
     uv run --group dev --python "{{tooling_python}}" ruff check {{ if fix == "true" { "--fix" } else { "" } }}
     uv run --group dev --python "{{tooling_python}}" ruff format {{ if fix == "true" { "" } else { "--check" } }}
 
-# Internal: run vermin minimum-version check over all projects.
+# Run vermin minimum-version check over all projects.
 # `typing_extensions` is excluded because vermin reports it as requiring ~2/~3
 # (the module's own declared compatibility range), which is a false positive
 # unrelated to the actual code under analysis.

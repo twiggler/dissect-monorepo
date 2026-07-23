@@ -50,7 +50,7 @@ uv build --package {project} --out-dir dist/{project}
 The build artifacts can be found in the `dist/{project}/` directory.
 
 For a more elaborate explanation on how to build and test the project, please see \
-[the recipes](../../doc/recipes.md) or \
+[the recipes](../../.monorepo/doc/recipes.md) or \
 [the documentation](https://docs.dissect.tools/en/latest/contributing/tooling.html).
 """
 

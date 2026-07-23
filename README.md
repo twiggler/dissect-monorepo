@@ -10,11 +10,11 @@ template/                ← monorepo template (mirrors the target layout exactl
   .monorepo/             ← operational scripts deployed to the monorepo
     tests/unit/          ← unit tests for the scripts in .monorepo/
     tests/integration/   ← integration tests for the monorepo tooling
+    doc/                 ← design documentation
   .gitignore             ← monorepo-wide ignore rules (consolidates per-project .gitignore files)
   Justfile               ← task runner recipes (test, release, bump, …)
   pyproject.toml         ← workspace config and shared tool settings
   ruff.template.toml     ← linter/formatter config (renamed to ruff.toml on installation)
-  doc/                   ← design documentation
 migrate/                 ← one-time migration pipeline (build monorepo from upstream)
   install_config.sh      ← copies template/ into a target monorepo checkout
   run_pipeline.sh        ← builds a fresh monorepo from the upstream sources
@@ -119,9 +119,9 @@ uv run --group dev pytest template/.monorepo/tests/integration -v
 
 ## Documentation
 
-- [template/doc/recipes.md](template/doc/recipes.md) — Justfile recipe reference and user guide
-- [template/doc/folder-layout.md](template/doc/folder-layout.md) — monorepo directory structure
-- [template/doc/tooling.md](template/doc/tooling.md) — tooling choices and rationale
-- [template/doc/release-strategy.md](template/doc/release-strategy.md) — release workflow
-- [template/doc/testing-strategy.md](template/doc/testing-strategy.md) — testing approach
+- [template/.monorepo/doc/recipes.md](template/.monorepo/doc/recipes.md) — Justfile recipe reference and user guide
+- [template/.monorepo/doc/folder-layout.md](template/.monorepo/doc/folder-layout.md) — monorepo directory structure
+- [template/.monorepo/doc/tooling.md](template/.monorepo/doc/tooling.md) — tooling choices and rationale
+- [template/.monorepo/doc/release-strategy.md](template/.monorepo/doc/release-strategy.md) — release workflow
+- [template/.monorepo/doc/testing-strategy.md](template/.monorepo/doc/testing-strategy.md) — testing approach
 

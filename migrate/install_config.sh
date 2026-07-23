@@ -28,7 +28,6 @@ cp "$CONFIG_DIR/.gitignore"         "$TARGET_DIR/.gitignore"
 rm -rf "$TARGET_DIR/.github" "$TARGET_DIR/.monorepo" "$TARGET_DIR/doc"
 rsync -r --exclude='__pycache__' "$CONFIG_DIR/.github/"        "$TARGET_DIR/.github/"
 rsync -r --exclude='__pycache__' "$CONFIG_DIR/.monorepo/"       "$TARGET_DIR/.monorepo/"
-rsync -r --exclude='__pycache__' "$CONFIG_DIR/doc/"             "$TARGET_DIR/doc/"
 mv "$TARGET_DIR/.monorepo/ruff.template.toml" "$TARGET_DIR/.monorepo/ruff.toml" # Idem
 
 echo "Done."
