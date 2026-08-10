@@ -7,7 +7,7 @@ The monorepo hosts two categories of projects that have fundamentally different 
 - **Pure-Python projects** — no compiled extension; can be tested directly from source in the workspace environment.
 - **Native projects** (currently `dissect.util` and `dissect.fve`) — contain a Rust extension that must be compiled before Python can import it. Testing them correctly requires validating two distinct things: that the Rust code integrates with its Python consumers, and that the resulting binary wheel can be packaged, installed, and executed correctly outside the workspace.
 
-The testing strategy is therefore layered: a fast workspace-based test run gives broad functional coverage on every push and PR, and a separate wheel-build-and-test pipeline validates packaging correctness. A nightly job fills the architecture coverage gap left by the PR build.
+The testing strategy is therefore layered: a fast workspace-based test run gives broad functional coverage on every push and PR, and a separate wheel-build-and-test pipeline validates packaging correctness. A nightly job `test-native-full` fills the architecture coverage gap left by the PR build.
 
 ---
 
@@ -26,7 +26,7 @@ The testing strategy is therefore layered: a fast workspace-based test run gives
 
 ### Decision 1: Affected-only testing on push and PR
 
-Running the full test suite for all 31 projects on every commit would be expensive even for pure-Python projects. Instead, the `test` job runs tests for the projects directly changed in the push or PR, plus every project that transitively depends on them.
+Running the full test suite for all projects on every commit would be expensive even for pure-Python projects. Instead, the `test` job runs tests for the projects directly changed in the push or PR, plus every project that transitively depends on them.
 
 **How it works**: `compute-base-ref.sh` determines the git commit to diff against:
 
@@ -71,7 +71,7 @@ The `variant=native` matrix entries install a Rust toolchain (`dtolnay/rust-tool
 
 **Weaknesses**:
 - The build produces a raw compiled artifact, not a wheel. Wheel-level metadata, entry points, platform tags, and the stable-ABI (`abi3`) constraint are never exercised.
-- Running inside the workspace means all other workspace members are on the Python path regardless of declared dependencies — the same masking problem described in the release strategy applies here (see "Ghost Dependencies").
+- Running inside the workspace means all other workspace members are on the Python path regardless of declared dependencies (see "Ghost Dependencies").
 - Does not test installation from a wheel or pip-installability.
 
 #### Mode B — Isolated wheel build and test (`test-native` / `test-native-full`)
@@ -80,13 +80,13 @@ The `build-native-wheels.yml` reusable workflow builds a real binary wheel using
 
 **Strengths**:
 - Tests the exact artifact that will be published to PyPI: correct wheel tags, stable-ABI compliance, embedded Rust binary, RPATH/linking.
-- The isolated environment catches ghost dependencies (see release strategy) — if the project accidentally relies on something pulled in by the workspace but not declared, tests will fail.
+- The isolated environment catches ghost dependencies — if the project accidentally relies on something pulled in by the workspace but not declared, tests will fail.
 - Exercises the `abi3` stable-ABI path used for production wheels. The in-place build (Mode A) compiles without `--py-limited-api` and produces a version-specific `.so`; cibuildwheel compiles with `--py-limited-api=<min-cpython>` (derived from `[tool.monorepo.test].python-versions`) and exercises the actual production code path.
 - Covers a wider platform matrix than the `test` job: Linux aarch64, macOS arm64, macOS x86_64, Windows amd64, Windows x86 — all without QEMU.
 
 **Weaknesses**:
 - Slower per platform: cibuildwheel installs Rust, compiles the extension, packages the wheel, and sets up an isolated virtual environment before running a single test.
-- Cannot cheaply vary the Python version matrix — cibuildwheel runs across all supported Python versions (CPython 3.10–3.14, PyPy 3.11, free-threaded CPython) in a single job; the per-version granularity of `test` is not replicated here.
+- No per-version parallelism — cibuildwheel tests all supported versions sequentially within a single runner, whereas the test job runs each version in parallel on its own runner.
 - Does not see other workspace projects during testing, so integration tests that require multiple dissect projects will not run in this mode.
 
 #### How the two modes complement each other
@@ -99,7 +99,6 @@ The `build-native-wheels.yml` reusable workflow builds a real binary wheel using
 | Tests stable ABI (`abi3`) | No | Yes |
 | Tests ghost dependency exposure | No | Yes |
 | Platform coverage | Ubuntu, Windows | Linux x86_64, Linux aarch64, macOS, Windows |
-| Python version coverage | 5 versions + PyPy | All cibuildwheel-supported versions |
 
 Together: the in-place mode catches functional regressions quickly and validates that the Rust extension works with its Python consumers; the isolated wheel mode validates that the packaged artifact is correct and self-contained. A failure in one mode but not the other is a meaningful signal — in-place passes but wheel fails typically means a packaging or ABI issue; wheel passes but in-place fails typically means a Rust API regression affecting consumers.
 
@@ -250,7 +249,7 @@ This suppression is enforced uniformly across all projects by `update_project_sr
 docs = ["sphinx>=8,<9", "sphinx-autoapi", "sphinx_argparse_cli", "furo"]
 ```
 
-Sphinx is pinned to `>=8,<9`. Sphinx 9 introduced a new `ref.python` cross-reference fallback (issue #10785) that, when resolving a `:class:\`type\`` reference in a signature like `type_: type[T]`, searches the entire object registry for attributes named `type` if no class by that name is found. Code that happens to define multiple attributes with the same unqualified name (common in the dissect codebase) triggers a spurious "more than one target found" warning that fails the build. Sphinx 8 does not perform this broader search and silently ignores unresolved `:class:\`type\`` references. Until either sphinx-autoapi avoids emitting the `:class:\`type\`` role for builtin types, or a project-wide intersphinx mapping is added so Sphinx can resolve `type` to `builtins.type` without searching the object registry, **upgrading Sphinx beyond 8.x will break the docs linter**.
+Sphinx is pinned to `>=8,<9`. Sphinx 9 introduced a new `ref.python` cross-reference fallback (issue #10785) that, when resolving a `` `:class:`type` `` reference in a signature like `type_: type[T]`, searches the entire object registry for attributes named `type` if no class by that name is found. Code that happens to define multiple attributes with the same unqualified name (common in the dissect codebase) triggers a spurious "more than one target found" warning that fails the build. Sphinx 8 does not perform this broader search and silently ignores unresolved `` `:class:`type` `` references. Until either sphinx-autoapi avoids emitting the `` `:class:`type` `` role for builtin types, or a project-wide intersphinx mapping is added so Sphinx can resolve `type` to `builtins.type` without searching the object registry, **upgrading Sphinx beyond 8.x will break the docs linter**.
 
 ---
 
