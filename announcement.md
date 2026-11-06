@@ -1,6 +1,6 @@
 # Dissect is moving to a monorepo
 
-**TL;DR:** We're merging the `dissect.*` repositories into one repository: `fox-it/dissect`. If you install Dissect from PyPI, nothing changes for you. If you contribute, your workflow will change, and we'd like your feedback before **1 december**.
+**TL;DR:** We're merging the `dissect.*` repositories into one repository: `fox-it/dissect`. If you install Dissect from PyPI, nothing changes for you. If you contribute, your workflow will change, and we'd like your feedback before **1 December**.
 
 ## Why
 
@@ -40,7 +40,7 @@ The `dissect.*` packages depend heavily on each other, but they live in 31 separ
 
 | Date | Step |
 |---|---|
-| Now – 1 december | Feedback. Try out the test instance (see below) |
+| Now – 1 December | Feedback. Try out the test instance (see below) |
 | `<PR_CUTOFF>` | PR cut-off: no new PRs on the old repositories |
 | `<FREEZE>` | Freeze: last merges on the old repositories |
 | `<GO_LIVE>` | Go-live: we build the monorepo from the final state of the old repositories. From now on you can migrate your open PRs |
@@ -55,4 +55,4 @@ After the feedback round, suitable dates will be substituted for `<PR_CUTOFF>`, 
 
 ## Feedback
 
- We want your input on the details: the tooling, the layout, the contributor workflow, the timeline, and anything this breaks for you. Please reply in this thread.
+We want your input on the details: the tooling, the layout, the contributor workflow, the timeline, and anything this breaks for you. Please reply in this thread.
