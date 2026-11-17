@@ -18,6 +18,7 @@ template/                ← monorepo template (mirrors the target layout exactl
 migrate/                 ← one-time migration pipeline (build monorepo from upstream)
   install_config.sh      ← copies template/ into a target monorepo checkout
   run_pipeline.sh        ← builds a fresh monorepo from the upstream sources
+  overwrite_remote.sh    ← replaces a GitHub repo's branches, tags and PRs with a local build
   migrate.sh             ← clones and merges each upstream project
   project-list           ← list of upstream repositories to migrate
   decouple_versions.sh   ← decouples pinned versions between projects
@@ -96,6 +97,18 @@ mounted directory must be empty.
 
 > **Network access required.** The container clones ~30 repositories from GitHub and resolves
 > packages from PyPI.
+
+### Overwrite a GitHub repository with a fresh build
+
+```sh
+migrate/overwrite_remote.sh /tmp/dissect-monorepo-test twiggler/dissect-monorepo-test
+```
+
+**Destructive.** This force-pushes `main` and replaces all remote tags with the local ones.
+It makes `main` the default branch, closes all open PRs, and deletes every other branch.
+It prints what will change and asks you to type the repository name to confirm. Pass
+`--yes` to skip the prompt. LFS objects are uploaded by the git-lfs `pre-push` hook as part
+of the push. Requires an authenticated `gh` CLI.
 
 ### Run the unit tests
 
