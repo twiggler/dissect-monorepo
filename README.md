@@ -25,6 +25,8 @@ migrate/                 ← one-time migration pipeline (build monorepo from up
   centralize_deps.py     ← centralises shared dependencies
   centralize_ruff_config.py ← centralises ruff configuration
   update_project_src_layout.py ← normalises src layout across projects
+utils/                   ← one-off tools (migrate_pr.py moves legacy PRs to the monorepo)
+comms/                   ← migration announcements and the script that posts them
 ```
 
 `template/` is a verbatim mirror of what `migrate/install_config.sh` deploys to the target

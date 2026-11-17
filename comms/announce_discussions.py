@@ -6,7 +6,7 @@
 """Post the monorepo announcement as GitHub Discussions.
 
 Usage:
-    uv run utils/announce_discussions.py [--dry-run] [--main OWNER/REPO]
+    uv run comms/announce_discussions.py [--dry-run] [--main OWNER/REPO]
         [--body PATH] [--repo-list PATH]
 
 Creates the main discussion, with the full announcement, on the --main repository, and a
@@ -204,9 +204,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--body",
-        default=repo_root / "announcement.md",
+        default=Path(__file__).resolve().parent / "announcement.md",
         type=Path,
-        help="Announcement file; its first line is the '# <title>' heading (default: announcement.md)",
+        help="Announcement file; its first line is the '# <title>' heading (default: comms/announcement.md)",
     )
     parser.add_argument(
         "--repo-list",
