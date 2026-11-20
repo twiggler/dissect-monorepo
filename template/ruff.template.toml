@@ -12,20 +12,25 @@ docstring-code-format = true
 
 [lint]
 select = [
-  "F", "E", "W", "I", "UP", "YTT", "ANN", "B", "C4", "DTZ", "T10",
+  "F", "E", "W", "I", "UP", "YTT", "ANN", "S", "B", "C4", "DTZ", "T10",
   "FA", "ISC", "G", "INP", "PIE", "PYI", "PT", "Q", "RSE", "RET",
-  "SLOT", "SIM", "TID", "TCH", "PTH", "PLC", "TRY", "FLY", "PERF",
+  "SLOT", "SIM", "TID", "TC", "PTH", "PLC", "TRY", "FLY", "PERF",
   "FURB", "RUF",
 ]
-ignore = ["E203", "B904", "UP024", "ANN002", "ANN003", "ANN204", "ANN401", "SIM105", "TRY003"]
+ignore = ["E203", "B904", "UP024", "ANN002", "ANN003", "ANN204", "ANN401", "SIM105", "TRY003", "PLC0415"]
 
 [lint.per-file-ignores]
-"**tests/**" = ["S101", "PLC0415"]
+"**tests/**" = ["S101"]
 ".monorepo/**" = ["INP001"]
-".monorepo/tests/**" = ["ANN", "INP001", "PERF203", "S101", "PLC0415"]
+".monorepo/tests/**" = ["ANN", "INP001", "PERF203", "S101"]
 "**/tests/_docs/**" = ["INP001"]
 "**/*.pyi" = ["E", "F", "F401", "PYI"]
 
-"projects/dissect.target/**" = ["PLC0415"]
-"projects/dissect.cstruct/**" = ["PLC0415"]                    
+# flake8-bandit (S) applies ONLY to dissect.util, the one project that opted in (fox-it/dissect.util#70).
+# The leading `!` negates the glob: S is ignored in every file EXCEPT those under projects/dissect.util/.
+"!projects/dissect.util/**" = ["S"]
+# `dissect` is a PEP 420 namespace package shared by all dissect.* distributions; it must not get an __init__.py
+"projects/dissect/src/dissect/**" = ["INP001"]
+# Quoted annotations are cstruct type expressions evaluated at runtime, not forward references
+"projects/dissect.cstruct/tests/test_declarative.py" = ["F821", "UP037"]
 "projects/dissect.target/src/dissect/target/helpers/magic/mimetypes/**" = ["E501"]
