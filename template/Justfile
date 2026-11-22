@@ -25,10 +25,12 @@ default_python := "3.10"
 # Example: just release all
 # Example: just release dissect.util dissect.cstruct
 # Example: just release all --target test
+[group('build')]
 release +args:
     .monorepo/release_pure.sh {{args}}
 
 # Remove all built wheels and sdists from the dist/ directory.
+[group('basics')]
 clean:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -37,12 +39,14 @@ clean:
 
 # List workspace projects whose current version has no release tag (i.e. not yet published).
 # Pass --names to get a bare newline-separated list of project names only.
+[group('housekeeping')]
 pending-releases *args:
     uv run --python "{{tooling_python}}" .monorepo/bump_version.py pending-releases {{args}}
 
 # Update the version specifier for an internal dependency across all projects.
 # Only modifies projects that already declare the dependency.
 # Example: just set-constraint dissect.cstruct ">=4.7,<5"
+[group('housekeeping')]
 set-constraint package specifier:
     uv run --python "{{tooling_python}}" .monorepo/set_constraint.py '{{package}}' '{{specifier}}'
 
@@ -55,6 +59,7 @@ set-constraint package specifier:
 # last release tag — there is nothing to release.
 # Example: just bump dissect.util dissect.cstruct
 # Example: just bump auto
+[group('housekeeping')]
 bump +packages:
     uv run --python "{{tooling_python}}" .monorepo/bump_version.py bump {{packages}}
     uv lock
@@ -65,16 +70,19 @@ bump +packages:
 # release tag (double-bump guard) or no new commits since the last release tag.
 # Example: just bump-patch dissect.util
 # Example: just bump-patch dissect.util dissect.cstruct
+[group('housekeeping')]
 bump-patch +packages:
     uv run --python "{{tooling_python}}" .monorepo/bump_version.py bump --patch {{packages}}
     uv lock
 
 # Regenerate the dissect meta-project dependency list from current workspace versions.
+[group('housekeeping')]
 update-meta:
     uv run --python "{{tooling_python}}" .monorepo/update_meta_deps.py
 
 # Run ruff check+format over all projects.
 # Pass fix="true" to auto-fix instead of reporting.
+[group('lint')]
 ruff fix="false":
     uv run --group dev --python "{{tooling_python}}" ruff check {{ if fix == "true" { "--fix" } else { "" } }}
     uv run --group dev --python "{{tooling_python}}" ruff format {{ if fix == "true" { "" } else { "--check" } }}
@@ -84,20 +92,26 @@ ruff fix="false":
 # (the module's own declared compatibility range), which is a false positive
 # unrelated to the actual code under analysis.
 # See: https://github.com/netromdk/vermin/issues/330
+[group('lint')]
 vermin:
     uv run --group dev --python "{{tooling_python}}" vermin -t={{default_python}}- --no-tips --lint --exclude typing_extensions projects
 
 # Check formatting and linting (ruff + vermin).
+[group('basics')]
+[group('lint')]
 lint:
     just ruff
     just vermin
 
 # Auto-fix ruff issues (vermin has no auto-fix).
+[group('basics')]
+[group('lint')]
 fix:
     just ruff true
 
 # Run all tooling scripts tests (unit and integration)
 # Example: just test-tooling -v
+[group('tests')]
 test-tooling *flags:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -106,6 +120,7 @@ test-tooling *flags:
 
 # Run tooling unit tests
 # Example: just test-tooling-unit -x
+[group('tests')]
 test-tooling-unit *flags:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -114,6 +129,7 @@ test-tooling-unit *flags:
 
 # Run tooling integration tests
 # Example: just test-tooling-integration -k "test_bump"
+[group('tests')]
 test-tooling-integration *flags:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -122,6 +138,7 @@ test-tooling-integration *flags:
 
 # Run ruff check+format over the monorepo tooling scripts.
 # Pass fix="true" to auto-fix instead of reporting.
+[group('lint')]
 lint-tooling fix="false":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -138,6 +155,7 @@ lint-tooling fix="false":
 # All workspace projects are installed as editable so autoapi can resolve imports
 # across sibling projects.
 # Example: just docs-check
+[group('build')]
 docs-check:
     uv run --group docs --all-packages --all-extras --python "{{tooling_python}}" bash .monorepo/docs-check.sh
 
@@ -145,6 +163,7 @@ docs-check:
 # files) so that the next docs-check starts from a clean state.
 # Run this after changing conf.py or autoapi_options to avoid stale output.
 # Example: just docs-clean
+[group('clean')]
 docs-clean:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -158,6 +177,7 @@ docs-clean:
 # editable with all extras and the dev dependency group.
 # Example: just sync
 # Example: just sync 3.12
+[group('basics')]
 sync env=default_python:
     uv sync --group dev --all-packages --all-extras --python {{env}}
 
@@ -172,6 +192,8 @@ sync env=default_python:
 # Example: just test dissect.xfs 3.11
 # Example: just test dissect.xfs 3.11 -k test_foo
 # Example: just test dissect.xfs 3.11 -k "serialize and not slow"
+[group('basics')]
+[group('tests')]
 [positional-arguments]
 test project env=default_python *args:
     #!/usr/bin/env bash
@@ -188,6 +210,7 @@ test project env=default_python *args:
 # Extra pytest args follow env and are forwarded verbatim (quoting preserved).
 # Example: just test-all 3.10 -k test_foo
 # Example: just test-all 3.10 -k "serialize and not slow"
+[group('tests')]
 [positional-arguments]
 test-all env=default_python *args:
     #!/usr/bin/env bash
@@ -203,6 +226,7 @@ test-all env=default_python *args:
 
 # Run pytest for every project across all configured Python environments.
 # Reads python-versions from [tool.monorepo.test] in pyproject.toml.
+[group('tests')]
 test-all-envs:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -214,6 +238,8 @@ test-all-envs:
 
 # Run tests only for projects affected by changes vs a base ref.
 # Example: just test-affected origin/main 3.11
+[group('tests')]
+[group('basics')]
 test-affected ref="origin/main" env=default_python:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -232,6 +258,7 @@ test-affected ref="origin/main" env=default_python:
 # Pass env to pin the Python version so the .so ABI matches the test run.
 # Requires: cargo/rustup installed locally.
 # Example: just build-native-inplace dissect.util 3.12
+[group('build')]
 build-native-inplace project env=default_python:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -240,6 +267,7 @@ build-native-inplace project env=default_python:
 
 # Compile the Rust extensions in-place for all native projects.
 # Example: just build-all-native-inplace 3.12
+[group('build')]
 build-all-native-inplace env=default_python:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -259,6 +287,7 @@ build-all-native-inplace env=default_python:
 # Example: just test-native dissect.util 3.12
 # Example: just test-native dissect.util 3.12 -k test_lz4
 # Example: just test-native dissect.util 3.12 -k "lz4 or zstd"
+[group('tests')]
 [positional-arguments]
 test-native project env=default_python *args:
     #!/usr/bin/env bash
@@ -270,6 +299,7 @@ test-native project env=default_python *args:
 # Build all native extensions in-place, then run the full test suite across every project.
 # DISSECT_FORCE_NATIVE causes native projects to fail (not skip) if the .so is unavailable.
 # Example: just test-native-all 3.10
+[group('tests')]
 test-native-all env=default_python:
     just build-all-native-inplace {{env}}
     DISSECT_FORCE_NATIVE=1 just test-all {{env}}
@@ -281,6 +311,7 @@ test-native-all env=default_python:
 # of native projects stays small and each has a pure-Python fallback.
 # DISSECT_FORCE_NATIVE causes native projects to fail (not skip) if the .so is unavailable.
 # Example: just test-native-affected origin/main 3.10
+[group('tests')]
 test-native-affected ref="origin/main" env=default_python:
     just build-all-native-inplace {{env}}
     DISSECT_FORCE_NATIVE=1 just test-affected {{ref}} {{env}}
@@ -293,6 +324,7 @@ test-native-affected ref="origin/main" env=default_python:
 # Requires Docker for Linux builds.
 # Example: just build-native-wheels dissect.util
 # Example: just build-native-wheels dissect.util "x86_64 i686 aarch64"
+[group('build')]
 build-native-wheels pkg archs="auto":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -331,6 +363,7 @@ build-native-wheels pkg archs="auto":
 # Example: just test-native-wheels                               # host arch only, all native projects
 # Example: just test-native-wheels "x86_64 i686 aarch64"          # multi-arch (nightly/release)
 # Example: just test-native-wheels auto "dissect.util dissect.fve" # specific projects only
+[group('tests')]
 test-native-wheels archs="auto" packages="all":
     #!/usr/bin/env bash
     set -euo pipefail
