@@ -31,6 +31,7 @@ release +args:
 
 # Remove all built wheels and sdists from the dist/ directory.
 [group('basics')]
+[group('clean')]
 clean:
     #!/usr/bin/env bash
     set -euo pipefail
