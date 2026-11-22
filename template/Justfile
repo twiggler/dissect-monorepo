@@ -210,6 +210,7 @@ test project env=default_python *args:
 # Example: just test-all 3.10 -k test_foo
 # Example: just test-all 3.10 -k "serialize and not slow"
 [group('tests')]
+[group('basics')]
 [positional-arguments]
 test-all env=default_python *args:
     #!/usr/bin/env bash
