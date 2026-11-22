@@ -110,6 +110,23 @@ It prints what will change and asks you to type the repository name to confirm. 
 `--yes` to skip the prompt. LFS objects are uploaded by the git-lfs `pre-push` hook as part
 of the push. Requires an authenticated `gh` CLI.
 
+#### Nightly refresh of the test monorepo
+
+[`.github/workflows/refresh-test-monorepo.yml`](.github/workflows/refresh-test-monorepo.yml)
+rebuilds the monorepo every night at 22:41 UTC and runs `overwrite_remote.sh` against
+`twiggler/dissect-monorepo-test`. The push triggers the test repo's CI on the fresh build. The
+test repo's own nightly CI (02:00 UTC) normally picks it up too. To run it by hand:
+
+```sh
+gh workflow run refresh-test-monorepo.yml
+```
+
+It pushes as a dedicated GitHub App that is installed only on `dissect-monorepo-test`, with
+Contents, Workflows and Pull requests write access. Each run mints a 1-hour token after the
+build has finished. The app's client ID (variable `TEST_MONOREPO_APP_CLIENT_ID`) and private
+key (secret `TEST_MONOREPO_APP_PRIVATE_KEY`) live in this repo's `test-monorepo` environment,
+which only `master` can use.
+
 ### Run the unit tests
 
 ```sh

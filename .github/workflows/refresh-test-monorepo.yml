@@ -1,0 +1,67 @@
+name: Refresh test monorepo
+
+# Builds a fresh monorepo and overwrites twiggler/dissect-monorepo-test with it.
+# The force-push triggers the test repo's CI on the fresh build. Running well before
+# the test repo's nightly CI (02:00 UTC, template/.github/workflows/ci.yml) means that
+# run normally tests the fresh build too, but GitHub may delay scheduled runs by hours.
+
+on:
+  schedule:
+    - cron: "41 22 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  # Never kill an overwrite halfway through.
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Holds the GitHub App credentials; restricted to the master branch.
+    environment: test-monorepo
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install git-filter-repo
+        run: uv tool install git-filter-repo
+
+      - name: Configure git
+        run: |
+          git config --global user.email "ci@github-actions"
+          git config --global user.name "GitHub Actions"
+          git lfs install
+
+      - name: Build monorepo
+        run: migrate/run_pipeline.sh "$RUNNER_TEMP/dissect-monorepo"
+
+      # Minted after the build so the token does not exist while PyPI and upstream code runs.
+      - name: Create token for the test repository
+        id: app-token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        with:
+          client-id: ${{ vars.TEST_MONOREPO_APP_CLIENT_ID }}
+          private-key: ${{ secrets.TEST_MONOREPO_APP_PRIVATE_KEY }}
+          owner: twiggler
+          repositories: dissect-monorepo-test
+          permission-contents: write
+          permission-workflows: write
+          permission-pull-requests: write
+
+      - name: Overwrite test repository
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          gh auth setup-git
+          migrate/overwrite_remote.sh --yes "$RUNNER_TEMP/dissect-monorepo" twiggler/dissect-monorepo-test

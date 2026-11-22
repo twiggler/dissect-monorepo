@@ -58,7 +58,13 @@ git push --atomic --prune "$URL" "+refs/heads/$BRANCH:refs/heads/$BRANCH" '+refs
 
 echo
 echo "=== Setting default branch to '$BRANCH' ==="
-gh repo edit "$REPO" --default-branch "$BRANCH"
+# Skip when already set: changing it needs admin rights, which the nightly
+# refresh credential deliberately lacks.
+if [[ "$(gh repo view "$REPO" --json defaultBranchRef --jq .defaultBranchRef.name)" == "$BRANCH" ]]; then
+  echo "Already '$BRANCH'"
+else
+  gh repo edit "$REPO" --default-branch "$BRANCH"
+fi
 
 echo
 echo "=== Closing open PRs ==="
