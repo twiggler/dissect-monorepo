@@ -6,7 +6,7 @@ For more information, please see [the documentation](https://docs.dissect.tools/
 
 ## What is Dissect?
 
-Dissect is an incident response framework build from various parsers and implementations of file formats. Tying this all together, Dissect allows you to work with tools named `target-query` and `target-shell` to quickly gain access to forensic artefacts, such as Runkeys, Prefetch files, and Windows Event Logs, just to name a few!
+Dissect is an incident response framework built from various parsers and implementations of file formats. Tying this all together, Dissect allows you to work with tools named `target-query` and `target-shell` to quickly gain access to forensic artefacts, such as Runkeys, Prefetch files, and Windows Event Logs, just to name a few!
 
 **Singular approach**
 
@@ -38,8 +38,8 @@ Join our [Discord server](https://discord.gg/tS48YbzXN7) to connect with the com
 
 ## Projects
 
-Dissect consists out of several individual projects, all of which are housed in this monorepo. 
-Each project is self-contained and can invidiually be installed.
+Dissect consists of several individual projects, all of which are housed in this monorepo.
+Each project is self-contained and can individually be installed.
 
 | Project                                               | Description                                                               |
 | ----------------------------------------------------- | ------------------------------------------------------------------------- |
@@ -131,5 +131,5 @@ Dissect is released as open source by Fox-IT (<https://www.fox-it.com>) part of 
 
 Developed by the Dissect Team (<dissect@fox-it.com>) and made available at <https://github.com/fox-it/dissect>.
 
-License terms: mixed AGPL3 (<https://www.gnu.org/licenses/agpl-3.0.html>) and Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0). 
+License terms: mixed AGPL3 (<https://www.gnu.org/licenses/agpl-3.0.html>) and Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0).
 For more information, see the LICENSE file of each project.
