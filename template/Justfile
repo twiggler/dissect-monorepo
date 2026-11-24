@@ -233,7 +233,12 @@ test-affected ref="origin/main" env=default_python:
     #!/usr/bin/env bash
     set -euo pipefail
     trap 'exit 130' INT
-    packages=$(git diff --name-only {{ref}} | uv run --python "{{tooling_python}}" .monorepo/affected_tests.py)
+    # git diff only sees files git already tracks, so also list new files that have not
+    # been added yet (ignored files excluded). Keep these as separate assignments: inside
+    # a single $(...) a failing git diff (e.g. an unknown ref) would go unnoticed.
+    changed=$(git diff --name-only {{ref}})
+    untracked=$(git ls-files --others --exclude-standard)
+    packages=$(printf '%s\n' "$changed" "$untracked" | uv run --python "{{tooling_python}}" .monorepo/affected_tests.py)
     if [ -z "$packages" ]; then
         echo "No projects affected. Nothing to do."
         exit 0

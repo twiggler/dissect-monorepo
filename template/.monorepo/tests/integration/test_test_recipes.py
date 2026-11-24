@@ -6,6 +6,7 @@ of the monorepo fixture, so each test takes seconds. Verifies that:
 - a project without tests does not count as a failure
 - Ctrl-C stops the whole run instead of only the current project
 - test-affected fails on an unknown ref instead of reporting "nothing affected"
+- test-affected sees new files that are not yet git-added
 - extra pytest arguments reach pytest intact
 """
 
@@ -180,6 +181,21 @@ def test_test_affected_fails_on_unknown_ref(tmp_path):
     assert result.returncode != 0
     assert "Nothing to do" not in result.stdout
     assert _ran(log) == []
+
+
+def test_test_affected_includes_untracked_files(tmp_path):
+    """New files count before they are git-added; ignored files do not."""
+    root, log = tmp_path / "ws", tmp_path / "ran.log"
+    _make_workspace(root, {"alpha": PASS, "bravo": PASS})
+    (root / ".gitignore").write_text("*.tmp\n")
+    _commit_all(root)
+    (root / "projects" / "alpha" / "new_module.py").write_text("x = 1\n")
+    (root / "projects" / "bravo" / "scratch.tmp").write_text("ignored\n")
+
+    result = _just(root, log, "test-affected", "HEAD", PY)
+
+    assert result.returncode == 0, result.stderr
+    assert _ran(log) == ["alpha"]
 
 
 def test_test_affected_with_nothing_affected(tmp_path):
