@@ -49,7 +49,7 @@ When 31 individual `dissect.*` repositories were merged into a single uv workspa
     └── integration/        # End-to-end tests: exercises just bump, just release, etc.
 ```
 
-**`tests/`**: the tooling test suite. Unit tests cover individual script functions; integration tests build a throw-away copy of the monorepo fixture and exercise `just bump`, `just bump-patch`, `just release`, and related recipes end-to-end. The multi-project test recipes (`test-all`, `test-affected`, `test-all-envs`) are tested against a tiny synthetic workspace instead, because running the real test suite would take hours. Run with `just test-tooling`, `just test-tooling-unit`, or `just test-tooling-integration` (see [Tooling](#tooling) in recipes.md).
+**`tests/`**: the tooling test suite. Unit tests cover individual script functions; integration tests build a throw-away copy of the monorepo fixture and exercise `just bump`, `just bump-patch`, `just release`, and related recipes end-to-end. The multi-project test recipes (`test-all`, `test-affected`, `test-all-envs`) are tested against a tiny synthetic workspace instead.
 
 ---
 
