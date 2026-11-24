@@ -11,6 +11,9 @@ tooling_python := `cat .monorepo/tooling-python`
 # Should match a CPython entry in [tool.monorepo.test].python-versions in pyproject.toml.
 default_python := "3.10"
 
+# Show available recipes (runs when you type just `just`)
+default:
+    @just --list --unsorted
 
 # Publish pending workspace projects to a package index, then create and push git tags.
 # Pure-Python projects only — native (Rust) projects are released via the
