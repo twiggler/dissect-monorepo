@@ -168,6 +168,8 @@ If you change the minimum supported Python version in `pyproject.toml`, update `
 
 ### Testing
 
+The recipes that test more than one project (`test-all`, `test-all-envs`, `test-affected`, the `test-native-*` variants and `test-native-wheels`) keep going when a project fails. At the end they list the projects (or, for `test-all-envs`, the Python versions) that failed and exit non-zero, so one broken project cannot hide failures in the others. Ctrl-C stops the whole run.
+
 #### `just test <project> <env> [args]`
 
 Run pytest for a single project using the given Python version. All workspace members are installed as editable so sibling dependencies are importable. Optional extra pytest arguments can be passed as the third argument.
