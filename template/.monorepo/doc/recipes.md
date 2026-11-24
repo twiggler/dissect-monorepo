@@ -361,7 +361,7 @@ just test-tooling-unit -x
 
 #### `just test-tooling-integration [flags]`
 
-Run only the integration tests under `.monorepo/tests/integration/`. Integration tests are slower — they build a throw-away copy of the monorepo and exercise the full `just bump` / `just release` workflows end-to-end. `MONOREPO_FIXTURE` defaults to `.`, which reuses the current working tree as the fixture to avoid a full build.
+Run only the integration tests under `.monorepo/tests/integration/`. Integration tests are slower — they build a throw-away copy of the monorepo and exercise the full `just bump` / `just release` workflows end-to-end. The tests for the multi-project test recipes (`test_test_recipes.py`) build their own small workspace and do not use the fixture. `MONOREPO_FIXTURE` defaults to `.`, which reuses the current working tree as the fixture to avoid a full build.
 
 ```
 just test-tooling-integration -k "test_bump"
