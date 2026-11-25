@@ -38,8 +38,11 @@ import httpx
 
 GITHUB_API = "https://api.github.com"
 
-# The repository migrated PRs are opened on. Switch to the real monorepo at go-live; until
-# then a default pointing there would let test runs open PRs on the legacy meta-repo.
+# The monorepo. The original PR only gets a "migrated" comment when the target is this repo,
+# so test runs against a copy never comment on real PRs.
+MONOREPO_URL = "https://github.com/fox-it/dissect"
+# The repository migrated PRs are opened on. Switch to MONOREPO_URL at go-live; until then
+# that is still the legacy meta-package repo.
 DEFAULT_TARGET = "https://github.com/twiggler/dissect-monorepo-test"
 # The monorepo's only branch (see migrate/overwrite_remote.sh).
 MONOREPO_BRANCH = "main"
@@ -420,6 +423,7 @@ def main() -> None:
     origin_owner, origin_repo = parse_remote_url(get_remote_url(monorepo_path))
     target_owner, target_repo = parse_remote_url(args.target)
     fork_mode = (origin_owner.lower(), origin_repo.lower()) != (target_owner.lower(), target_repo.lower())
+    targets_monorepo = (target_owner.lower(), target_repo.lower()) == parse_remote_url(MONOREPO_URL)
 
     branch_name = f"migrate/{package_name}/pr-{pr_number}"
     if git(["rev-parse", "--verify", "--quiet", f"refs/heads/{branch_name}"], cwd=monorepo_path, check=False).stdout:
@@ -446,9 +450,12 @@ def main() -> None:
 
         # Closed PRs and archived repositories can still be migrated: everything the script
         # reads stays available. Only the comment on the original PR is not possible then.
-        source_archived = fetch_repo(client, owner, repo)["archived"]
-        if source_archived:
-            print(f"Note: {owner}/{repo} is archived; no comment will be posted on the original PR.", file=sys.stderr)
+        comment = targets_monorepo
+        if not targets_monorepo:
+            print(f"Note: the target is not {MONOREPO_URL}; the original PR gets no comment.", file=sys.stderr)
+        elif fetch_repo(client, owner, repo)["archived"]:
+            comment = False
+            print(f"Note: {owner}/{repo} is archived; the original PR gets no comment.", file=sys.stderr)
 
         print("Fetching commit list ...", file=sys.stderr)
         # Merges of the base branch into the PR branch bring in no changes of the PR's own.
@@ -594,7 +601,7 @@ def main() -> None:
         new_pr_url = pr_resp.json()["html_url"]
         print(f"Draft PR created: {new_pr_url}", file=sys.stderr)
 
-        if not source_archived:
+        if comment:
             api(
                 client,
                 "POST",

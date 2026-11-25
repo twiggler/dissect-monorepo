@@ -123,7 +123,8 @@ uv run utils/migrate_pr.py https://github.com/fox-it/dissect.util/pull/42 \
    draft PR on the target titled `[migrated] <original title>`.
 6. Posts a comment on the original PR with a link to the new draft. This step is skipped
    if the legacy repository is archived, because archived repositories don't accept
-   comments.
+   comments, and if the target is not `fox-it/dissect`, so test runs against a copy of
+   the monorepo leave the original PR alone.
 
 The PR is always squashed. Replaying its commits one by one fails for PRs that merged the
 legacy default branch into their branch, which about a third of the open PRs did. The
