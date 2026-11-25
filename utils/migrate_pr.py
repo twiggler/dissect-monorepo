@@ -19,8 +19,10 @@ Always run with --dry-run first to inspect the draft PR body before making any c
 """
 
 import argparse
+import base64
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -72,18 +74,38 @@ def resolve_token() -> str:
     )
 
 
+def git_auth_env(token: str) -> dict[str, str]:
+    """Return environment variables that make git and git-lfs authenticate to GitHub with the token.
+
+    The token travels in an HTTP header set through GIT_CONFIG_* variables instead of in a
+    URL, so it never appears in command lines, error messages or remote configuration.
+    """
+    credentials = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+    return {
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "http.https://github.com/.extraheader",
+        "GIT_CONFIG_VALUE_0": f"AUTHORIZATION: basic {credentials}",
+    }
+
+
 # ── GitHub API ────────────────────────────────────────────────────────────────
 
 
-def api_get(
-    client: httpx.Client,
-    path: str,
-    *,
-    accept: str = "application/vnd.github+json",
-) -> httpx.Response:
-    resp = client.get(f"{GITHUB_API}{path}", headers={"Accept": accept})
-    resp.raise_for_status()
+def api(client: httpx.Client, method: str, path: str, **kwargs: object) -> httpx.Response:
+    """Call the GitHub API and exit with GitHub's error message if the call fails."""
+    resp = client.request(method, f"{GITHUB_API}{path}", **kwargs)
+    if resp.is_error:
+        try:
+            body = resp.json()
+            detail = " ".join(filter(None, [body.get("message"), str(body.get("errors") or "")]))
+        except ValueError:
+            detail = resp.text
+        sys.exit(f"error: GitHub API {method} {path} returned {resp.status_code}: {detail}")
     return resp
+
+
+def api_get(client: httpx.Client, path: str) -> httpx.Response:
+    return api(client, "GET", path)
 
 
 def fetch_pr(client: httpx.Client, owner: str, repo: str, pr_number: int) -> dict:
@@ -136,15 +158,17 @@ def git(
     env: dict | None = None,
     check: bool = True,
 ) -> subprocess.CompletedProcess:
-    full_env = {**os.environ, **(env or {})}
-    return subprocess.run(
+    """Run git; if check is set and git fails, exit with the command and git's error output."""
+    proc = subprocess.run(
         ["git", *args],
         cwd=cwd,
-        env=full_env,
-        check=check,
+        env={**os.environ, **(env or {})},
         capture_output=True,
         text=True,
     )
+    if check and proc.returncode != 0:
+        sys.exit(f"error: `git {shlex.join(args)}` failed:\n{proc.stderr.rstrip()}")
+    return proc
 
 
 def get_remote_url(cwd: str) -> str:
@@ -158,18 +182,11 @@ def parse_remote_url(url: str) -> tuple[str, str]:
     m = re.match(r"https://(?:[^@]+@)?github\.com/([^/]+)/(.+?)(?:\.git)?$", url)
     if m:
         return m.group(1), m.group(2)
-    sys.exit(f"error: cannot parse GitHub remote URL: {url!r}")
+    sys.exit(f"error: cannot parse GitHub repository URL: {url!r}")
 
 
-def authenticated_url(owner: str, repo: str, token: str) -> str:
-    return f"https://x-access-token:{token}@github.com/{owner}/{repo}.git"
-
-
-def push_url(remote_url: str, token: str) -> str:
-    """Return the URL to use for git push; injects token for HTTPS remotes."""
-    if remote_url.startswith("git@"):
-        return remote_url
-    return re.sub(r"https://", f"https://x-access-token:{token}@", remote_url, count=1)
+def github_url(owner: str, repo: str) -> str:
+    return f"https://github.com/{owner}/{repo}.git"
 
 
 # ── LFS ───────────────────────────────────────────────────────────────────────
@@ -179,7 +196,7 @@ def fetch_lfs_objects(
     source_owner: str,
     source_repo: str,
     head_sha: str,
-    token: str,
+    auth: dict[str, str],
     cwd: str,
 ) -> None:
     """Fetch LFS objects at head_sha from the source repo into the local cache.
@@ -187,14 +204,13 @@ def fetch_lfs_objects(
     Adds a temporary remote, runs `git lfs fetch`, then removes the remote.
     The local cache is then picked up by the git-lfs pre-push hook on `git push`.
     """
-    source_url = authenticated_url(source_owner, source_repo, token)
     remote_name = "__lfs_source__"
-    git(["remote", "add", remote_name, source_url], cwd=cwd)
+    git(["remote", "add", remote_name, github_url(source_owner, source_repo)], cwd=cwd)
     try:
         print("Fetching LFS objects from source ...", file=sys.stderr)
         # Fetch git objects first so `git lfs fetch` can call `git ls-tree` on the SHA.
-        git(["fetch", remote_name, head_sha], cwd=cwd, check=False)
-        proc = git(["lfs", "fetch", remote_name, "FETCH_HEAD"], cwd=cwd, check=False)
+        git(["fetch", remote_name, head_sha], cwd=cwd, env=auth, check=False)
+        proc = git(["lfs", "fetch", remote_name, "FETCH_HEAD"], cwd=cwd, env=auth, check=False)
         if proc.returncode != 0:
             print(f"warning: git lfs fetch incomplete:\n{proc.stderr}", file=sys.stderr)
     finally:
@@ -211,7 +227,7 @@ def migrate_commits(
     num_commits: int,
     package_name: str,
     pr_url: str,
-    token: str,
+    auth: dict[str, str],
     monorepo_path: str,
 ) -> None:
     """Rewrite PR commits with git-filter-repo and apply them onto the current branch.
@@ -226,23 +242,22 @@ def migrate_commits(
     because its 3-way merge base (boundary_sha, with source-repo paths) differs from
     monorepo HEAD (monorepo paths), causing spurious conflicts on every patched file.
     """
-    source_url = authenticated_url(source_owner, source_repo, token)
-
     with tempfile.TemporaryDirectory(prefix="migrate_pr_") as tmp_dir:
         # 1. Shallow-fetch the PR commits into a throwaway repo.
         #    depth = num_commits + 1 so the parent of the first PR commit is available
         #    as the base for cherry-pick's 3-way merge.
         print("Fetching PR commits ...", file=sys.stderr)
-        subprocess.run(["git", "init", tmp_dir], check=True, capture_output=True)
+        git(["init", tmp_dir], cwd=tmp_dir)
         git(
             [
                 "fetch",
                 "--depth",
                 str(num_commits + 1),
-                source_url,
+                github_url(source_owner, source_repo),
                 f"refs/pull/{pr_number}/head",
             ],
             cwd=tmp_dir,
+            env=auth,
         )
         git(["checkout", "FETCH_HEAD"], cwd=tmp_dir)
 
@@ -442,6 +457,7 @@ def main() -> None:
     fork_mode = (origin_owner.lower(), origin_repo.lower()) != (target_owner.lower(), target_repo.lower())
 
     token = resolve_token()
+    auth = git_auth_env(token)
     client_headers = {
         "Authorization": f"Bearer {token}",
         "X-GitHub-Api-Version": "2022-11-28",
@@ -525,7 +541,7 @@ def main() -> None:
         # Create the migration branch from the tip of the target's default branch rather than
         # the local HEAD: git am needs an up-to-date monorepo, and a fork may lag behind.
         print(f"Fetching {MONOREPO_BRANCH} from {target_owner}/{target_repo} ...", file=sys.stderr)
-        git(["fetch", authenticated_url(target_owner, target_repo, token), MONOREPO_BRANCH], cwd=monorepo_path)
+        git(["fetch", github_url(target_owner, target_repo), MONOREPO_BRANCH], cwd=monorepo_path, env=auth)
         git(["checkout", "-b", branch_name, "FETCH_HEAD"], cwd=monorepo_path)
 
         # Rewrite paths with filter-repo and apply onto branch.
@@ -536,24 +552,17 @@ def main() -> None:
             num_commits=num_commits,
             package_name=package_name,
             pr_url=args.pr_url,
-            token=token,
+            auth=auth,
             monorepo_path=monorepo_path,
         )
 
         # Fetch LFS objects referenced by the PR head into the local cache so the
         # git-lfs pre-push hook can upload them to the target automatically.
-        fetch_lfs_objects(owner, repo, head_sha, token, monorepo_path)
+        fetch_lfs_objects(owner, repo, head_sha, auth, monorepo_path)
 
         # Push (git-lfs pre-push hook uploads any cached LFS objects).
         print(f"Pushing {branch_name} ...", file=sys.stderr)
-        push_remote = push_url(remote_url, token)
-        push_proc = git(
-            ["push", "--force-with-lease", push_remote, branch_name],
-            cwd=monorepo_path,
-            check=False,
-        )
-        if push_proc.returncode != 0:
-            sys.exit(f"error: git push failed.\n  git stderr:\n{push_proc.stderr}")
+        git(["push", "--force-with-lease", "origin", branch_name], cwd=monorepo_path, env=auth)
 
         # Phase 4 — open draft PR and notify.
         print(f"Opening draft PR on {target_owner}/{target_repo} ...", file=sys.stderr)
@@ -566,14 +575,15 @@ def main() -> None:
         }
         if maintainer_can_modify:
             pr_payload["maintainer_can_modify"] = True
-        pr_resp = client.post(f"{GITHUB_API}/repos/{target_owner}/{target_repo}/pulls", json=pr_payload)
-        pr_resp.raise_for_status()
+        pr_resp = api(client, "POST", f"/repos/{target_owner}/{target_repo}/pulls", json=pr_payload)
         new_pr_url = pr_resp.json()["html_url"]
         print(f"Draft PR created: {new_pr_url}", file=sys.stderr)
 
         if not source_archived:
-            client.post(
-                f"{GITHUB_API}/repos/{owner}/{repo}/issues/{pr_number}/comments",
+            api(
+                client,
+                "POST",
+                f"/repos/{owner}/{repo}/issues/{pr_number}/comments",
                 json={
                     "body": (
                         f"This PR has been migrated to the dissect monorepo: {new_pr_url}\n\n"
@@ -581,7 +591,7 @@ def main() -> None:
                         f"`{branch_name}` branch of {origin_owner}/{origin_repo}."
                     )
                 },
-            ).raise_for_status()
+            )
             print("Comment posted on original PR.", file=sys.stderr)
 
         print(f"\nDone! Review the draft and un-draft when ready: {new_pr_url}")
