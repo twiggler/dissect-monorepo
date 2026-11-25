@@ -5,8 +5,8 @@
 #   just test-affected
 #   just test-affected origin/main 3.11
 
+set minimum-version := "1.55.0"
 set default-list := true
-set minimum-version := "1.52.0"
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 tooling_python := `cat .monorepo/tooling-python`
