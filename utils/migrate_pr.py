@@ -427,7 +427,10 @@ def main() -> None:
 
     branch_name = f"migrate/{package_name}/pr-{pr_number}"
     if git(["rev-parse", "--verify", "--quiet", f"refs/heads/{branch_name}"], cwd=monorepo_path, check=False).stdout:
-        sys.exit(f"error: branch {branch_name} already exists. Delete it to migrate the PR again.")
+        sys.exit(
+            f"error: branch {branch_name} already exists, probably from an earlier run.\n"
+            f"Delete it (git branch -D {branch_name}) to migrate the PR again."
+        )
 
     token = resolve_token()
     auth = git_auth_env(token)
@@ -448,13 +451,22 @@ def main() -> None:
         if pr_data["merged_at"]:
             sys.exit(f"error: {args.pr_url} is already merged, so its changes are part of the monorepo.")
 
+        source_repo = fetch_repo(client, owner, repo)
+        # A PR on top of another PR's branch can only be migrated once that branch is in the monorepo.
+        stacked = base_ref != source_repo["default_branch"]
+        if stacked:
+            print(
+                f"warning: the PR is based on {base_ref}, not {source_repo['default_branch']}. Its changes only "
+                f"apply once those on {base_ref} are in the monorepo.",
+                file=sys.stderr,
+            )
+
         # Closed PRs and archived repositories can still be migrated: everything the script
-        # reads stays available. Only the comment on the original PR is not possible then.
-        comment = targets_monorepo
+        # reads stays available. Archived repositories just don't accept the comment.
+        comment = targets_monorepo and not source_repo["archived"]
         if not targets_monorepo:
             print(f"Note: the target is not {MONOREPO_URL}; the original PR gets no comment.", file=sys.stderr)
-        elif fetch_repo(client, owner, repo)["archived"]:
-            comment = False
+        elif source_repo["archived"]:
             print(f"Note: {owner}/{repo} is archived; the original PR gets no comment.", file=sys.stderr)
 
         print("Fetching commit list ...", file=sys.stderr)
@@ -498,7 +510,7 @@ def main() -> None:
                 cwd=tmp_dir,
             ).stdout
             if not patch:
-                sys.exit(f"error: nothing to migrate; the PR only changes files that are not migrated: {dropped_files}")
+                sys.exit(f"error: nothing to migrate; the PR only changes {', '.join(dropped_files)}.")
             lfs_objects = changed_lfs_objects(head_sha, changed, tmp_dir)
 
             if warnings:
@@ -511,22 +523,33 @@ def main() -> None:
 
             # Phase 4 — commit the changes on top of the target's main. They are applied in a
             # temporary index, so the working tree and the current branch stay as they are.
+            # --3way merges files that main changed since the merge base, as GitHub does when it
+            # merges; the merge base's blobs are in the monorepo's history.
             print(f"Fetching {MONOREPO_BRANCH} from {target_owner}/{target_repo} ...", file=sys.stderr)
             git(["fetch", github_url(target_owner, target_repo), MONOREPO_BRANCH], cwd=monorepo_path, env=auth)
             parent = git(["rev-parse", "FETCH_HEAD"], cwd=monorepo_path).stdout.strip()
             index = {"GIT_INDEX_FILE": str(Path(tmp_dir) / "index")}
             git(["read-tree", parent], cwd=monorepo_path, env=index)
             applied = git(
-                ["apply", "--cached", "--whitespace=nowarn"], cwd=monorepo_path, env=index, input=patch, check=False
+                ["apply", "--cached", "--3way", "--whitespace=nowarn"],
+                cwd=monorepo_path,
+                env=index,
+                input=patch,
+                check=False,
             )
             if applied.returncode != 0:
                 patch_file = Path(tempfile.gettempdir()) / f"migrate_pr_{package_name}_pr-{pr_number}.patch"
                 patch_file.write_text(patch, encoding="utf-8", errors="surrogateescape")
+                if stacked:
+                    hint = f"The PR is based on {base_ref}; migrate it once the changes on {base_ref} are merged."
+                else:
+                    hint = (
+                        "The PR conflicts with main. Merge main into the original PR, resolve the conflicts and\n"
+                        "retry, or apply the patch below yourself with `git apply --3way` and resolve them there."
+                    )
                 sys.exit(
                     f"error: the PR's changes do not apply to {target_owner}/{target_repo}@{MONOREPO_BRANCH}:\n"
-                    f"{applied.stderr.rstrip()}\n\n"
-                    f"The patch is saved as {patch_file}. Usually the PR is based on an old commit; merge\n"
-                    f"the latest default branch of {owner}/{repo} into it (GitHub's 'Update branch') and retry."
+                    f"{applied.stderr.rstrip()}\n\n{hint}\nThe patch is saved as {patch_file}."
                 )
             tree = git(["write-tree"], cwd=monorepo_path, env=index).stdout.strip()
             commit = git(

@@ -160,8 +160,12 @@ your clone, and uploaded to the LFS store of `origin` (in fork mode, the fork).
 
 ### When the changes do not apply
 
-The diff is applied without a 3-way merge, so it only applies if the files it touches
-are the same in the monorepo as at the PR's merge base. If not, the script stops before
-creating anything and saves the patch in your temp directory. The usual cause is a PR
-based on an old commit: merge the latest default branch of the legacy repository into
-the PR (GitHub's "Update branch" button) and run the script again.
+The diff is applied with `git apply --3way`, so changes the monorepo made since the PR's
+merge base are merged in the way GitHub merges them. If that conflicts, the script stops
+before creating anything and saves the patch in your temp directory. Either merge the
+latest default branch of the legacy repository into the PR, resolve the conflicts there
+and run the script again, or apply the patch yourself with `git apply --3way` and resolve
+the conflicts in your clone.
+
+A PR based on another PR's branch instead of the default branch only applies once that
+other PR is in the monorepo. The script warns about such PRs.
