@@ -40,7 +40,7 @@ clean:
 
 # List workspace projects whose current version has no release tag (i.e. not yet published).
 # Pass --names to get a bare newline-separated list of project names only.
-[group('housekeeping')]
+[group('release')]
 pending-releases *args:
     uv run --python "{{tooling_python}}" .monorepo/bump_version.py pending-releases {{args}}
 
