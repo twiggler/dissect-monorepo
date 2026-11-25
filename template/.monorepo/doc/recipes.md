@@ -168,6 +168,8 @@ If you change the minimum supported Python version in `pyproject.toml`, update `
 
 ### Testing
 
+The recipes that test more than one project (`test-all`, `test-all-envs`, `test-affected`, the `test-native-*` variants and `test-native-wheels`) keep going when a project fails. At the end they list the projects (or, for `test-all-envs`, the Python versions) that failed and exit non-zero, so one broken project cannot hide failures in the others. Ctrl-C stops the whole run.
+
 #### `just test <project> <env> [args]`
 
 Run pytest for a single project using the given Python version. All workspace members are installed as editable so sibling dependencies are importable. Optional extra pytest arguments can be passed as the third argument.
@@ -192,7 +194,7 @@ Run `test-all` for every Python version listed in `[tool.monorepo.test].python-v
 
 #### `just test-affected [ref] [env]`
 
-Run tests only for projects whose source files changed relative to `ref` (default: `origin/main`) using the given Python version (default: `3.10`). The list of affected projects is computed by `.monorepo/affected_tests.py`.
+Run tests only for projects whose source files changed relative to `ref` (default: `origin/main`) using the given Python version (default: `3.10`). Uncommitted changes count too, including new files you have not `git add`ed yet; files ignored by `.gitignore` do not. The list of affected projects is computed by `.monorepo/affected_tests.py`.
 
 ```
 just test-affected origin/main 3.11
@@ -359,7 +361,7 @@ just test-tooling-unit -x
 
 #### `just test-tooling-integration [flags]`
 
-Run only the integration tests under `.monorepo/tests/integration/`. Integration tests are slower — they build a throw-away copy of the monorepo and exercise the full `just bump` / `just release` workflows end-to-end. `MONOREPO_FIXTURE` defaults to `.`, which reuses the current working tree as the fixture to avoid a full build.
+Run only the integration tests under `.monorepo/tests/integration/`. Integration tests are slower — they build a throw-away copy of the monorepo and exercise the full `just bump` / `just release` workflows end-to-end. The tests for the multi-project test recipes (`test_test_recipes.py`) build their own small workspace and do not use the fixture. `MONOREPO_FIXTURE` defaults to `.`, which reuses the current working tree as the fixture to avoid a full build.
 
 ```
 just test-tooling-integration -k "test_bump"

@@ -183,6 +183,8 @@ test project env=default_python *args:
 
 # Run pytest for every project using the given Python version.
 # Skips directories that don't have a pyproject.toml.
+# A failing project does not stop the run: the failed projects are listed at the
+# end and the recipe exits non-zero. Ctrl-C stops the whole run.
 # Extra pytest args follow env and are forwarded verbatim (quoting preserved).
 # Example: just test-all 3.10 -k test_foo
 # Example: just test-all 3.10 -k "serialize and not slow"
@@ -191,39 +193,66 @@ test-all env=default_python *args:
     #!/usr/bin/env bash
     set -euo pipefail
     shift 1  # drop env; "$@" is now just the extra pytest args
+    # Without this, Ctrl-C would only end the current project and the loop would go on.
+    trap 'exit 130' INT
+    failed=()
     for d in projects/*; do
         if [ -f "$d/pyproject.toml" ]; then
             project_name=$(basename "$d")
             echo "--- Running tests for $project_name with Python {{env}} ---"
-            just test "$project_name" {{env}} "$@"
+            just test "$project_name" {{env}} "$@" || failed+=("$project_name")
         fi
     done
+    if (( ${#failed[@]} )); then
+        echo "Tests FAILED with Python {{env}} for: ${failed[*]}" >&2
+        exit 1
+    fi
 
 # Run pytest for every project across all configured Python environments.
 # Reads python-versions from [tool.monorepo.test] in pyproject.toml.
+# Like test-all, a failing version does not stop the run.
 test-all-envs:
     #!/usr/bin/env bash
     set -euo pipefail
+    trap 'exit 130' INT
     mapfile -t envs < <(uv run --python "{{tooling_python}}" .monorepo/python_versions.py --format versions)
+    failed=()
     for env in "${envs[@]}"; do
         echo "=== Testing with Python $env ==="
-        just test-all "$env"
+        just test-all "$env" || failed+=("$env")
     done
+    if (( ${#failed[@]} )); then
+        echo "Tests FAILED with Python ${failed[*]} (failed projects are listed at the end of each run)" >&2
+        exit 1
+    fi
 
 # Run tests only for projects affected by changes vs a base ref.
+# Like test-all, a failing project does not stop the run.
 # Example: just test-affected origin/main 3.11
 test-affected ref="origin/main" env=default_python:
     #!/usr/bin/env bash
     set -euo pipefail
-    packages=$(git diff --name-only {{ref}} | uv run --python "{{tooling_python}}" .monorepo/affected_tests.py)
+    trap 'exit 130' INT
+    # git diff only sees files git already tracks, so also list new files that have not
+    # been added yet (ignored files excluded). Keep these as separate assignments: inside
+    # a single $(...) a failing git diff (e.g. an unknown ref) would go unnoticed.
+    changed=$(git diff --name-only {{ref}})
+    untracked=$(git ls-files --others --exclude-standard)
+    packages=$(printf '%s\n' "$changed" "$untracked" | uv run --python "{{tooling_python}}" .monorepo/affected_tests.py)
     if [ -z "$packages" ]; then
         echo "No projects affected. Nothing to do."
         exit 0
     fi
     echo "Affected projects: $packages"
+    failed=()
     for pkg in $packages; do
-        just test "$pkg" {{env}}
+        echo "--- Running tests for $pkg with Python {{env}} ---"
+        just test "$pkg" {{env}} || failed+=("$pkg")
     done
+    if (( ${#failed[@]} )); then
+        echo "Tests FAILED with Python {{env}} for: ${failed[*]}" >&2
+        exit 1
+    fi
 
 # Compile the Rust extension in-place for a single native project.
 # The .so lands in src/..., directly visible to the uv editable install.
@@ -328,15 +357,22 @@ build-native-wheels pkg archs="auto":
 # packages: space-separated project names, or 'all' to build every native project.
 # Example: just test-native-wheels                               # host arch only, all native projects
 # Example: just test-native-wheels "x86_64 i686 aarch64"          # multi-arch (nightly/release)
+# Like test-all, a failing project does not stop the run.
 # Example: just test-native-wheels auto "dissect.util dissect.fve" # specific projects only
 test-native-wheels archs="auto" packages="all":
     #!/usr/bin/env bash
     set -euo pipefail
+    trap 'exit 130' INT
     if [[ "{{packages}}" == "all" ]]; then
         mapfile -t to_build < <(uv run --python "{{tooling_python}}" .monorepo/native_projects.py)
     else
         read -ra to_build <<< "{{packages}}"
     fi
+    failed=()
     for pkg in "${to_build[@]}"; do
-        just build-native-wheels "$pkg" "{{archs}}"
+        just build-native-wheels "$pkg" "{{archs}}" || failed+=("$pkg")
     done
+    if (( ${#failed[@]} )); then
+        echo "Wheel build or tests FAILED for: ${failed[*]}" >&2
+        exit 1
+    fi
