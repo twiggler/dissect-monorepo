@@ -187,21 +187,22 @@ def git(
 ) -> subprocess.CompletedProcess:
     """Run git; if check is set and git fails, exit with the command and git's error output.
 
-    Output is decoded with surrogateescape, so patches that are not valid UTF-8 survive the
-    round trip from one git command to the next unchanged.
+    Input and output are passed as bytes and converted with surrogateescape rather than in
+    text mode, which would turn CRLF into LF: patches survive the round trip from one git
+    command to the next unchanged, including CRLF lines and bytes that are not UTF-8.
     """
     proc = subprocess.run(
         ["git", *args],
         cwd=cwd,
         env={**os.environ, **(env or {})},
-        input=input,
+        input=None if input is None else input.encode("utf-8", "surrogateescape"),
         capture_output=True,
-        encoding="utf-8",
-        errors="surrogateescape",
     )
+    stdout = proc.stdout.decode("utf-8", "surrogateescape")
+    stderr = proc.stderr.decode("utf-8", "surrogateescape")
     if check and proc.returncode != 0:
-        sys.exit(f"error: `git {shlex.join(args)}` failed:\n{proc.stderr.rstrip()}")
-    return proc
+        sys.exit(f"error: `git {shlex.join(args)}` failed:\n{stderr.rstrip()}")
+    return subprocess.CompletedProcess(proc.args, proc.returncode, stdout, stderr)
 
 
 def get_remote_url(cwd: str | Path) -> str:
@@ -501,6 +502,7 @@ def main() -> None:
                     "diff-tree",
                     "-p",
                     "--binary",
+                    "--full-index",  # git apply --3way needs unambiguous blob ids
                     "-M",
                     rewrite_tree(merge_base, package_name, tmp_dir),
                     rewrite_tree(head_sha, package_name, tmp_dir),
@@ -539,7 +541,7 @@ def main() -> None:
             )
             if applied.returncode != 0:
                 patch_file = Path(tempfile.gettempdir()) / f"migrate_pr_{package_name}_pr-{pr_number}.patch"
-                patch_file.write_text(patch, encoding="utf-8", errors="surrogateescape")
+                patch_file.write_bytes(patch.encode("utf-8", "surrogateescape"))
                 if stacked:
                     hint = f"The PR is based on {base_ref}; migrate it once the changes on {base_ref} are merged."
                 else:
