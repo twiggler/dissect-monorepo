@@ -3,10 +3,14 @@
 # requires-python = ">=3.11"
 # dependencies = ["httpx"]
 # ///
-"""Migrate an open PR from a per-project repo to the dissect monorepo.
+"""Migrate a PR from a per-project repo to the dissect monorepo.
 
 Usage:
     uv run utils/migrate_pr.py <pr-url> [--target URL] [--monorepo-path PATH] [--dry-run]
+
+The PR is squashed into one commit holding the changes GitHub shows under "Files changed",
+with the paths rewritten to the monorepo layout. The commit is made on top of the target's
+main branch without touching the working tree of the checkout.
 
 The branch is always pushed to the `origin` remote of the checkout, and the PR is always
 opened on the target (--target, default: the monorepo):
@@ -15,7 +19,8 @@ opened on the target (--target, default: the monorepo):
   needed, so PR authors can migrate their own PRs and keep pushing to them.
 - Maintainer mode (origin is the target itself).
 
-Always run with --dry-run first to inspect the draft PR body before making any changes.
+Always run with --dry-run first: it shows the commit and the draft PR body and checks that
+the changes apply, without pushing or creating anything.
 """
 
 import argparse
@@ -27,7 +32,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import textwrap
 from pathlib import Path
 
 import httpx
@@ -40,14 +44,19 @@ DEFAULT_TARGET = "https://github.com/twiggler/dissect-monorepo-test"
 # The monorepo's only branch (see migrate/overwrite_remote.sh).
 MONOREPO_BRANCH = "main"
 
-# Files that exist in the old per-project repos but have no place in the monorepo.
-# Changes to these files in migrated PRs are dropped and noted in the PR body.
+# Paths of the old per-project repos that migrate/migrate.sh does not carry over, or that the
+# monorepo replaced. Changes to them are dropped and noted in the PR body.
 #
-# tox.ini        — test runner config, replaced by the Justfile / uv in the monorepo.
-# pyproject.toml — was heavily edited during migration (new build backend, dependency
-#                  groups, tool config); applying old per-project changes on top of the
-#                  migrated version would almost certainly conflict or be incorrect.
-DROP_FILES = frozenset({"tox.ini", "pyproject.toml"})
+# tox.ini                — superseded by the `just` recipes.
+# .github                — CI lives in the monorepo root.
+# .gitignore             — consolidated into the monorepo root .gitignore.
+# .git-blame-ignore-revs — merged into the monorepo root file, with rewritten commit ids.
+# tests/_docs/Makefile   — the monorepo calls sphinx-build directly.
+# pyproject.toml         — kept, but heavily edited during migration (build backend, dependency
+#                          groups, tool config); old per-project changes would conflict or be wrong.
+DROP_PATHS = ("tox.ini", ".github", ".gitignore", ".git-blame-ignore-revs", "tests/_docs/Makefile", "pyproject.toml")
+
+CO_AUTHOR_RE = re.compile(r"^co-authored-by:\s*(.+?)\s*<([^>]+)>\s*$", re.IGNORECASE | re.MULTILINE)
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -92,8 +101,12 @@ def git_auth_env(token: str) -> dict[str, str]:
 
 
 def api(client: httpx.Client, method: str, path: str, **kwargs: object) -> httpx.Response:
-    """Call the GitHub API and exit with GitHub's error message if the call fails."""
-    resp = client.request(method, f"{GITHUB_API}{path}", **kwargs)
+    """Call the GitHub API and exit with GitHub's error message if the call fails.
+
+    path is relative to the API root, or a full URL such as a pagination link.
+    """
+    url = path if path.startswith("https://") else f"{GITHUB_API}{path}"
+    resp = client.request(method, url, **kwargs)
     if resp.is_error:
         try:
             body = resp.json()
@@ -108,17 +121,29 @@ def api_get(client: httpx.Client, path: str) -> httpx.Response:
     return api(client, "GET", path)
 
 
+def api_get_all(client: httpx.Client, path: str) -> list[dict]:
+    """GET every page of a list endpoint; GitHub returns 30 items per page by default."""
+    items: list[dict] = []
+    url: str | None = f"{path}?per_page=100"
+    while url:
+        resp = api_get(client, url)
+        items += resp.json()
+        url = resp.links.get("next", {}).get("url")
+    return items
+
+
 def fetch_pr(client: httpx.Client, owner: str, repo: str, pr_number: int) -> dict:
     return api_get(client, f"/repos/{owner}/{repo}/pulls/{pr_number}").json()
 
 
 def fetch_pr_commits(client: httpx.Client, owner: str, repo: str, pr_number: int) -> list[dict]:
-    return api_get(client, f"/repos/{owner}/{repo}/pulls/{pr_number}/commits").json()
+    return api_get_all(client, f"/repos/{owner}/{repo}/pulls/{pr_number}/commits")
 
 
-def fetch_pr_files(client: httpx.Client, owner: str, repo: str, pr_number: int) -> list[str]:
-    """Return the list of filenames changed by the PR."""
-    return [f["filename"] for f in api_get(client, f"/repos/{owner}/{repo}/pulls/{pr_number}/files").json()]
+def fetch_merge_base(client: httpx.Client, owner: str, repo: str, base_ref: str, head_sha: str) -> str:
+    """Return the commit GitHub diffs the PR head against under "Files changed"."""
+    compare = api_get(client, f"/repos/{owner}/{repo}/compare/{base_ref}...{head_sha}?per_page=1").json()
+    return compare["merge_base_commit"]["sha"]
 
 
 def fetch_repo(client: httpx.Client, owner: str, repo: str) -> dict:
@@ -139,12 +164,10 @@ def is_user_account(client: httpx.Client, login: str) -> bool:
 
 def classify_path(path: str) -> str:
     """Return 'rewrite', 'drop', or 'warn' for a file path from the old repo."""
-    if re.match(r"^dissect/", path):
-        return "rewrite"
-    if re.match(r"^tests/", path):
-        return "rewrite"
-    if path in DROP_FILES:
+    if any(path == dropped or path.startswith(f"{dropped}/") for dropped in DROP_PATHS):
         return "drop"
+    if path.startswith(("dissect/", "tests/")):
+        return "rewrite"
     return "warn"
 
 
@@ -154,24 +177,31 @@ def classify_path(path: str) -> str:
 def git(
     args: list[str],
     *,
-    cwd: str,
+    cwd: str | Path,
     env: dict | None = None,
+    input: str | None = None,
     check: bool = True,
 ) -> subprocess.CompletedProcess:
-    """Run git; if check is set and git fails, exit with the command and git's error output."""
+    """Run git; if check is set and git fails, exit with the command and git's error output.
+
+    Output is decoded with surrogateescape, so patches that are not valid UTF-8 survive the
+    round trip from one git command to the next unchanged.
+    """
     proc = subprocess.run(
         ["git", *args],
         cwd=cwd,
         env={**os.environ, **(env or {})},
+        input=input,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="surrogateescape",
     )
     if check and proc.returncode != 0:
         sys.exit(f"error: `git {shlex.join(args)}` failed:\n{proc.stderr.rstrip()}")
     return proc
 
 
-def get_remote_url(cwd: str) -> str:
+def get_remote_url(cwd: str | Path) -> str:
     return git(["remote", "get-url", "origin"], cwd=cwd).stdout.strip()
 
 
@@ -179,7 +209,7 @@ def parse_remote_url(url: str) -> tuple[str, str]:
     m = re.match(r"git@github\.com:([^/]+)/(.+?)(?:\.git)?$", url)
     if m:
         return m.group(1), m.group(2)
-    m = re.match(r"https://(?:[^@]+@)?github\.com/([^/]+)/(.+?)(?:\.git)?$", url)
+    m = re.match(r"https://(?:[^@]+@)?github\.com/([^/]+)/(.+?)(?:\.git)?/?$", url)
     if m:
         return m.group(1), m.group(2)
     sys.exit(f"error: cannot parse GitHub repository URL: {url!r}")
@@ -189,162 +219,93 @@ def github_url(owner: str, repo: str) -> str:
     return f"https://github.com/{owner}/{repo}.git"
 
 
-# ── LFS ───────────────────────────────────────────────────────────────────────
+# ── Squashing ─────────────────────────────────────────────────────────────────
+#
+# The PR is migrated as the diff between its merge base and its head, which is what
+# GitHub shows under "Files changed". Replaying the individual commits does not work for
+# PRs that merged the base branch into their branch (about a third of them): the merged
+# commits would be replayed too, and conflict resolutions in merge commits would be lost.
 
 
-def fetch_lfs_objects(
-    source_owner: str,
-    source_repo: str,
-    head_sha: str,
-    auth: dict[str, str],
-    cwd: str,
-) -> None:
-    """Fetch LFS objects at head_sha from the source repo into the local cache.
+def fetch_source(tmp_dir: str, owner: str, repo: str, merge_base: str, head_sha: str, auth: dict[str, str]) -> None:
+    """Fetch just the merge base and the head of the PR into a bare throwaway repository.
 
-    Adds a temporary remote, runs `git lfs fetch`, then removes the remote.
-    The local cache is then picked up by the git-lfs pre-push hook on `git push`.
+    Nothing is checked out: a checkout would download every LFS file in the tree, and it
+    fails outright when git-lfs cannot tell where to download from.
     """
-    remote_name = "__lfs_source__"
-    git(["remote", "add", remote_name, github_url(source_owner, source_repo)], cwd=cwd)
-    try:
-        print("Fetching LFS objects from source ...", file=sys.stderr)
-        # Fetch git objects first so `git lfs fetch` can call `git ls-tree` on the SHA.
-        git(["fetch", remote_name, head_sha], cwd=cwd, env=auth, check=False)
-        proc = git(["lfs", "fetch", remote_name, "FETCH_HEAD"], cwd=cwd, env=auth, check=False)
-        if proc.returncode != 0:
-            print(f"warning: git lfs fetch incomplete:\n{proc.stderr}", file=sys.stderr)
-    finally:
-        git(["remote", "remove", remote_name], cwd=cwd)
+    git(["init", "--bare", tmp_dir], cwd=tmp_dir)
+    git(["remote", "add", "source", github_url(owner, repo)], cwd=tmp_dir)
+    git(["fetch", "--depth", "1", "source", merge_base, head_sha], cwd=tmp_dir, env=auth)
 
 
-# ── Migration ─────────────────────────────────────────────────────────────────
+def mktree(entries: list[str], cwd: str) -> str:
+    return git(["mktree", "-z"], cwd=cwd, input="".join(f"{entry}\0" for entry in entries)).stdout.strip()
 
 
-def migrate_commits(
-    source_owner: str,
-    source_repo: str,
-    pr_number: int,
-    num_commits: int,
-    package_name: str,
-    pr_url: str,
-    auth: dict[str, str],
-    monorepo_path: str,
-) -> None:
-    """Rewrite PR commits with git-filter-repo and apply them onto the current branch.
+def rewrite_tree(commit: str, package_name: str, cwd: str) -> str:
+    """Return a tree with the commit's files at their monorepo paths.
 
-    Uses a temporary clone so no persistent state is left behind.
-
-    Path rewriting is done by git-filter-repo which handles all diff edge cases
-    (renames, binary files, LFS pointers, mode changes) correctly by operating on
-    git objects rather than diff text.
-
-    git-am applies each commit as a patch (context matching). Cherry-pick is NOT used
-    because its 3-way merge base (boundary_sha, with source-repo paths) differs from
-    monorepo HEAD (monorepo paths), causing spurious conflicts on every patched file.
+    dissect/ moves to projects/<package>/src/dissect/, everything else to projects/<package>/.
     """
-    with tempfile.TemporaryDirectory(prefix="migrate_pr_") as tmp_dir:
-        # 1. Shallow-fetch the PR commits into a throwaway repo.
-        #    depth = num_commits + 1 so the parent of the first PR commit is available
-        #    as the base for cherry-pick's 3-way merge.
-        print("Fetching PR commits ...", file=sys.stderr)
-        git(["init", tmp_dir], cwd=tmp_dir)
-        git(
-            [
-                "fetch",
-                "--depth",
-                str(num_commits + 1),
-                github_url(source_owner, source_repo),
-                f"refs/pull/{pr_number}/head",
-            ],
-            cwd=tmp_dir,
-            env=auth,
-        )
-        git(["checkout", "FETCH_HEAD"], cwd=tmp_dir)
+    entries = []
+    for entry in git(["ls-tree", "-z", commit], cwd=cwd).stdout.split("\0"):
+        if not entry:
+            continue
+        if entry.partition("\t")[2] == "dissect":
+            entry = f"040000 tree {mktree([entry], cwd)}\tsrc"
+        entries.append(entry)
+    for directory in (package_name, "projects"):
+        entries = [f"040000 tree {mktree(entries, cwd)}\t{directory}"]
+    return mktree(entries, cwd)
 
-        # 2. Rewrite paths and inject Migrated-from trailer with filter-repo.
-        #
-        # Path rules (--filename-callback):
-        #   dissect/...     → projects/<pkg>/src/dissect/...   (source files)
-        #   tests/...       → projects/<pkg>/tests/...          (test files)
-        #   tox.ini         → dropped
-        #   pyproject.toml  → dropped
-        #   anything else   → projects/<pkg>/<original>         (warned in PR body)
-        filename_cb = textwrap.dedent(f"""\
-            if filename.startswith(b"dissect/"):
-                return b"projects/{package_name}/src/" + filename
-            elif filename.startswith(b"tests/"):
-                return b"projects/{package_name}/" + filename
-            elif filename in (b"tox.ini", b"pyproject.toml"):
-                return None
-            else:
-                return b"projects/{package_name}/" + filename
-        """)
 
-        message_cb = textwrap.dedent(f"""\
-            message = message.rstrip()
-            if b"Migrated-from:" not in message:
-                message = message + b"\\n\\nMigrated-from: {pr_url}"
-            return message
-        """)
+def changed_files(base: str, head: str, cwd: str) -> dict[str, str]:
+    """Return {path: status letter (A, M, D, ...)} for the files that differ between two commits."""
+    fields = git(["diff-tree", "-r", "-z", "--no-renames", "--name-status", base, head], cwd=cwd).stdout.split("\0")
+    return dict(zip(fields[1::2], fields[0::2], strict=False))
 
-        proc = subprocess.run(
-            [
-                "git",
-                "filter-repo",
-                "--force",
-                "--filename-callback",
-                filename_cb,
-                "--message-callback",
-                message_cb,
-            ],
-            cwd=tmp_dir,
-            capture_output=True,
-            text=True,
-        )
-        if proc.returncode != 0:
-            sys.exit(f"error: git filter-repo failed:\n{proc.stderr}")
 
-        # 3. Serialize the rewritten commits as a patch mailbox.
-        #    format-patch encodes all content types (text, binary, LFS pointers) safely.
-        #    The mailbox includes author name/email/date and the full commit message.
-        patches = git(
-            ["format-patch", "--stdout", f"HEAD~{num_commits}..HEAD"],
-            cwd=tmp_dir,
-        )
-        if not patches.stdout.strip():
-            print(
-                "warning: all commits became empty after path rewriting "
-                "(only dropped files were changed). Nothing to apply.",
-                file=sys.stderr,
-            )
-            return
+def changed_lfs_objects(head: str, changed: dict[str, str], cwd: str) -> dict[str, str]:
+    """Return {path: LFS object id} for the LFS files the PR adds or modifies."""
+    objects = {}
+    for line in git(["lfs", "ls-files", "--long", head], cwd=cwd).stdout.splitlines():
+        oid, _, path = line.split(" ", 2)
+        if changed.get(path, "D") != "D":
+            objects[path] = oid
+    return objects
 
-        # 4. Apply the patch series to the monorepo.
-        #    Pure context matching (no --3way): the patches are generated from the
-        #    *rewritten* source commits, so their context lines reflect the current
-        #    state of files in the source repo.  Because migration preserved file
-        #    content verbatim, those context lines match what is in the monorepo —
-        #    even if the source repo has advanced since migration, the monorepo files
-        #    at the affected paths have not changed (only the source repo did).
-        #
-        #    --3way is intentionally omitted: it would use boundary_sha's blobs as
-        #    the merge base, but the monorepo is behind boundary_sha (migration was
-        #    done at an earlier point), causing spurious conflicts on every file the
-        #    source repo touched between migration and the PR base.
-        #
-        #    --committer-date-is-author-date preserves the original commit timestamps.
-        print("Applying rewritten commits ...", file=sys.stderr)
-        am_proc = subprocess.run(
-            ["git", "am", "--committer-date-is-author-date"],
-            input=patches.stdout,
-            cwd=monorepo_path,
-            env={**os.environ},
-            capture_output=True,
-            text=True,
-        )
-        if am_proc.returncode != 0:
-            subprocess.run(["git", "am", "--abort"], cwd=monorepo_path, capture_output=True)
-            sys.exit(f"error: git am failed (patch does not apply cleanly).\n  git output:\n{am_proc.stderr}")
+
+def squash_commit_metadata(title: str, commits: list[dict], pr_author: str, pr_url: str) -> tuple[str, dict[str, str]]:
+    """Return the message and the author environment variables for the squashed commit.
+
+    The author is the PR author, with the name and email from their own commits. Everyone
+    else with commits in the PR, or credited in a Co-authored-by trailer, becomes a
+    co-author. The body lists the original commit messages, as GitHub's squash merge does.
+    """
+    author = next((c for c in commits if (c["author"] or {}).get("login") == pr_author), commits[0])
+    author = author["commit"]["author"]
+
+    co_authors: dict[str, str] = {}
+    entries = []
+    for c in commits:
+        commit_author = c["commit"]["author"]
+        co_authors.setdefault(commit_author["email"].lower(), f"{commit_author['name']} <{commit_author['email']}>")
+        for name, email in CO_AUTHOR_RE.findall(c["commit"]["message"]):
+            co_authors.setdefault(email.lower(), f"{name} <{email}>")
+        subject, _, body = CO_AUTHOR_RE.sub("", c["commit"]["message"]).strip().partition("\n")
+        entries.append(f"* {subject}" + (f"\n\n{body.strip()}" if body.strip() else ""))
+    co_authors.pop(author["email"].lower(), None)
+
+    separator = "\n\n" if any("\n" in entry for entry in entries) else "\n"
+    trailers = [f"Co-authored-by: {co_author}" for co_author in co_authors.values()]
+    trailers.append(f"Migrated-from: {pr_url}")
+    message = f"{title}\n\n{separator.join(entries)}\n\n" + "\n".join(trailers) + "\n"
+    author_env = {
+        "GIT_AUTHOR_NAME": author["name"],
+        "GIT_AUTHOR_EMAIL": author["email"],
+        "GIT_AUTHOR_DATE": commits[-1]["commit"]["author"]["date"],
+    }
+    return message, author_env
 
 
 # ── PR body ───────────────────────────────────────────────────────────────────
@@ -358,14 +319,24 @@ def build_pr_body(
     original_body: str,
     package_name: str,
     original_base_ref: str,
+    num_commits: int,
     dropped_files: list[str],
     warnings: list[str],
 ) -> str:
+    if migrated_by == contributor_login:
+        origin_note = f"> Migrated from {old_pr_url} by its author, @{contributor_login}.\n"
+    else:
+        origin_note = f"> Migrated from {old_pr_url} by @{migrated_by}.\n> Original author: @{contributor_login}\n"
+
+    squash_section = ""
+    if num_commits > 1:
+        squash_section = f"\n- The {num_commits} original commits were squashed into one, which lists their messages."
+
     dropped_section = ""
     if dropped_files:
         files = ", ".join(f"`{f}`" for f in dropped_files)
         dropped_section = (
-            f"\n- The following files were not migrated (no longer needed after `src`-layout migration): {files}"
+            f"\n- Changes to these files were not migrated, because the monorepo dropped or replaced them: {files}"
         )
 
     warnings_section = ""
@@ -380,14 +351,14 @@ def build_pr_body(
 
     return (
         f"> [!NOTE]\n"
-        f"> Migrated from {old_pr_url} by @{migrated_by}.\n"
-        f"> Original author: @{contributor_login}\n"
+        f"{origin_note}"
         f"\n---\n\n"
         f"{body}\n"
         f"\n---\n\n"
         f"**Migration notes**\n\n"
         f"- Project: `{package_name}`\n"
         f"- Original base branch: `{original_base_ref}`"
+        f"{squash_section}"
         f"{dropped_section}"
         f"{warnings_section}\n"
     )
@@ -414,7 +385,7 @@ def normalize_package_name(repo: str) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Migrate an open GitHub PR from a per-project repo to the dissect monorepo. "
+            "Migrate a GitHub PR from a per-project repo to the dissect monorepo. "
             "Run from a clone of your fork of the monorepo (fork mode), or from a clone of the "
             "monorepo itself if you have write access (maintainer mode). "
             "Always run with --dry-run first."
@@ -434,27 +405,25 @@ def main() -> None:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Print the file classification and draft PR body; make no changes",
+        help="Show the commit and draft PR body and check that the changes apply; push and create nothing",
     )
     args = parser.parse_args()
 
-    # Check for required external tools.
-    if subprocess.run(["git", "filter-repo", "--version"], capture_output=True).returncode != 0:
-        sys.exit(
-            "error: git-filter-repo is required but not installed.\n"
-            "  pip install git-filter-repo\n"
-            "  or: apt/dnf/brew install git-filter-repo"
-        )
+    if subprocess.run(["git", "lfs", "version"], capture_output=True).returncode != 0:
+        sys.exit("error: git-lfs is required but not installed. See https://git-lfs.com.")
 
     monorepo_path = Path(args.monorepo_path).resolve()
 
     # Phase 1 — inputs and inference
     owner, repo, pr_number = parse_pr_url(args.pr_url)
     package_name = normalize_package_name(repo)
-    remote_url = get_remote_url(monorepo_path)
-    origin_owner, origin_repo = parse_remote_url(remote_url)
+    origin_owner, origin_repo = parse_remote_url(get_remote_url(monorepo_path))
     target_owner, target_repo = parse_remote_url(args.target)
     fork_mode = (origin_owner.lower(), origin_repo.lower()) != (target_owner.lower(), target_repo.lower())
+
+    branch_name = f"migrate/{package_name}/pr-{pr_number}"
+    if git(["rev-parse", "--verify", "--quiet", f"refs/heads/{branch_name}"], cwd=monorepo_path, check=False).stdout:
+        sys.exit(f"error: branch {branch_name} already exists. Delete it to migrate the PR again.")
 
     token = resolve_token()
     auth = git_auth_env(token)
@@ -482,13 +451,12 @@ def main() -> None:
             print(f"Note: {owner}/{repo} is archived; no comment will be posted on the original PR.", file=sys.stderr)
 
         print("Fetching commit list ...", file=sys.stderr)
-        commits = fetch_pr_commits(client, owner, repo, pr_number)
-        num_commits = len(commits)
-
-        print("Fetching file list ...", file=sys.stderr)
-        filenames = fetch_pr_files(client, owner, repo, pr_number)
-        dropped_files = [p for p in filenames if classify_path(p) == "drop"]
-        warnings = [p for p in filenames if classify_path(p) == "warn"]
+        # Merges of the base branch into the PR branch bring in no changes of the PR's own.
+        commits = [c for c in fetch_pr_commits(client, owner, repo, pr_number) if len(c["parents"]) == 1]
+        if not commits:
+            sys.exit(f"error: {args.pr_url} consists of merge commits only; there is nothing to migrate.")
+        merge_base = fetch_merge_base(client, owner, repo, base_ref, head_sha)
+        message, author_env = squash_commit_metadata(title, commits, contributor_login, args.pr_url)
 
         migrated_by = fetch_authenticated_user(client)
 
@@ -502,69 +470,116 @@ def main() -> None:
             maintainer_can_modify = False
             print(f"Maintainer mode: pushing to and opening PR on {target_owner}/{target_repo}", file=sys.stderr)
 
-        if warnings:
-            print(
-                f"warning: unrecognised root-level files will be placed under projects/{package_name}/:",
-                file=sys.stderr,
+        with tempfile.TemporaryDirectory(prefix="migrate_pr_") as tmp_dir:
+            # Phase 3 — squash the PR and rewrite its paths
+            print("Fetching the PR's merge base and head ...", file=sys.stderr)
+            fetch_source(tmp_dir, owner, repo, merge_base, head_sha, auth)
+            changed = changed_files(merge_base, head_sha, tmp_dir)
+            dropped_files = sorted(p for p in changed if classify_path(p) == "drop")
+            warnings = sorted(p for p in changed if classify_path(p) == "warn")
+            patch = git(
+                [
+                    "diff-tree",
+                    "-p",
+                    "--binary",
+                    "-M",
+                    rewrite_tree(merge_base, package_name, tmp_dir),
+                    rewrite_tree(head_sha, package_name, tmp_dir),
+                    "--",
+                    *(f":(exclude)projects/{package_name}/{dropped}" for dropped in DROP_PATHS),
+                ],
+                cwd=tmp_dir,
+            ).stdout
+            if not patch:
+                sys.exit(f"error: nothing to migrate; the PR only changes files that are not migrated: {dropped_files}")
+            lfs_objects = changed_lfs_objects(head_sha, changed, tmp_dir)
+
+            if warnings:
+                print(
+                    f"warning: unrecognised root-level files will be placed under projects/{package_name}/:",
+                    file=sys.stderr,
+                )
+                for w in warnings:
+                    print(f"  {w}", file=sys.stderr)
+
+            # Phase 4 — commit the changes on top of the target's main. They are applied in a
+            # temporary index, so the working tree and the current branch stay as they are.
+            print(f"Fetching {MONOREPO_BRANCH} from {target_owner}/{target_repo} ...", file=sys.stderr)
+            git(["fetch", github_url(target_owner, target_repo), MONOREPO_BRANCH], cwd=monorepo_path, env=auth)
+            parent = git(["rev-parse", "FETCH_HEAD"], cwd=monorepo_path).stdout.strip()
+            index = {"GIT_INDEX_FILE": str(Path(tmp_dir) / "index")}
+            git(["read-tree", parent], cwd=monorepo_path, env=index)
+            applied = git(
+                ["apply", "--cached", "--whitespace=nowarn"], cwd=monorepo_path, env=index, input=patch, check=False
             )
-            for w in warnings:
-                print(f"  {w}", file=sys.stderr)
+            if applied.returncode != 0:
+                patch_file = Path(tempfile.gettempdir()) / f"migrate_pr_{package_name}_pr-{pr_number}.patch"
+                patch_file.write_text(patch, encoding="utf-8", errors="surrogateescape")
+                sys.exit(
+                    f"error: the PR's changes do not apply to {target_owner}/{target_repo}@{MONOREPO_BRANCH}:\n"
+                    f"{applied.stderr.rstrip()}\n\n"
+                    f"The patch is saved as {patch_file}. Usually the PR is based on an old commit; merge\n"
+                    f"the latest default branch of {owner}/{repo} into it (GitHub's 'Update branch') and retry."
+                )
+            tree = git(["write-tree"], cwd=monorepo_path, env=index).stdout.strip()
+            commit = git(
+                ["commit-tree", tree, "-p", parent, "-F", "-"], cwd=monorepo_path, env=author_env, input=message
+            ).stdout.strip()
 
-        pr_body = build_pr_body(
-            old_pr_url=args.pr_url,
-            migrated_by=migrated_by,
-            contributor_login=contributor_login,
-            original_body=original_body,
-            package_name=package_name,
-            original_base_ref=base_ref,
-            dropped_files=dropped_files,
-            warnings=warnings,
-        )
+            pr_body = build_pr_body(
+                old_pr_url=args.pr_url,
+                migrated_by=migrated_by,
+                contributor_login=contributor_login,
+                original_body=original_body,
+                package_name=package_name,
+                original_base_ref=base_ref,
+                num_commits=len(commits),
+                dropped_files=dropped_files,
+                warnings=warnings,
+            )
 
-        if args.dry_run:
-            print("\n=== FILE CLASSIFICATION ===\n")
-            for filename in filenames:
-                action = classify_path(filename)
-                print(f"  [{action:7}] {filename}")
-            print("\n=== DRAFT PR BODY ===\n")
-            print(pr_body)
-            return
+            if args.dry_run:
+                print("\n=== FILES ===\n")
+                for path in sorted(changed):
+                    print(f"  [{classify_path(path):7}] {path}")
+                if lfs_objects:
+                    print("\n=== LFS FILES ===\n")
+                    for path in lfs_objects:
+                        print(f"  {path}")
+                print("\n=== COMMIT ===\n")
+                print(git(["show", "--stat", "--no-color", "--format=fuller", commit], cwd=monorepo_path).stdout)
+                print("=== DRAFT PR BODY ===\n")
+                print(pr_body)
+                print(
+                    f"Dry run: the changes apply to {target_owner}/{target_repo}@{MONOREPO_BRANCH}. Nothing was pushed."
+                )
+                return
 
-        # Phase 3 — apply to monorepo
-        branch_name = f"migrate/{package_name}/pr-{pr_number}"
+            if lfs_objects:
+                # Download only the LFS files the PR changes, straight into the clone's LFS store.
+                print(f"Fetching {len(lfs_objects)} LFS file(s) from {owner}/{repo} ...", file=sys.stderr)
+                git_dir = git(["rev-parse", "--git-common-dir"], cwd=monorepo_path).stdout.strip()
+                lfs_storage = (monorepo_path / git_dir / "lfs").resolve()
+                git(
+                    [
+                        *("-c", f"lfs.storage={lfs_storage}", "lfs", "fetch"),
+                        *(f"--include={','.join(lfs_objects)}", "source", head_sha),
+                    ],
+                    cwd=tmp_dir,
+                    env=auth,
+                )
 
-        # Verify clean working tree.
-        status = git(["status", "--porcelain"], cwd=monorepo_path)
-        if status.stdout.strip():
-            sys.exit("error: monorepo working tree is not clean. Commit or stash your changes first.")
+        # Phase 5 — push
+        git(["branch", branch_name, commit], cwd=monorepo_path)
+        print(f"Pushing {branch_name} to {origin_owner}/{origin_repo} ...", file=sys.stderr)
+        if lfs_objects:
+            git(["lfs", "push", "--object-id", "origin", *lfs_objects.values()], cwd=monorepo_path, env=auth)
+        # --no-verify skips the git-lfs pre-push hook. The PR's LFS files were pushed above,
+        # and the hook would also look for those of commits on main that origin lacks (a fork
+        # that lags behind), which this clone does not necessarily have.
+        git(["push", "--no-verify", "--set-upstream", "origin", branch_name], cwd=monorepo_path, env=auth)
 
-        # Create the migration branch from the tip of the target's default branch rather than
-        # the local HEAD: git am needs an up-to-date monorepo, and a fork may lag behind.
-        print(f"Fetching {MONOREPO_BRANCH} from {target_owner}/{target_repo} ...", file=sys.stderr)
-        git(["fetch", github_url(target_owner, target_repo), MONOREPO_BRANCH], cwd=monorepo_path, env=auth)
-        git(["checkout", "-b", branch_name, "FETCH_HEAD"], cwd=monorepo_path)
-
-        # Rewrite paths with filter-repo and apply onto branch.
-        migrate_commits(
-            source_owner=owner,
-            source_repo=repo,
-            pr_number=pr_number,
-            num_commits=num_commits,
-            package_name=package_name,
-            pr_url=args.pr_url,
-            auth=auth,
-            monorepo_path=monorepo_path,
-        )
-
-        # Fetch LFS objects referenced by the PR head into the local cache so the
-        # git-lfs pre-push hook can upload them to the target automatically.
-        fetch_lfs_objects(owner, repo, head_sha, auth, monorepo_path)
-
-        # Push (git-lfs pre-push hook uploads any cached LFS objects).
-        print(f"Pushing {branch_name} ...", file=sys.stderr)
-        git(["push", "--force-with-lease", "origin", branch_name], cwd=monorepo_path, env=auth)
-
-        # Phase 4 — open draft PR and notify.
+        # Phase 6 — open draft PR and notify.
         print(f"Opening draft PR on {target_owner}/{target_repo} ...", file=sys.stderr)
         pr_payload = {
             "title": f"[migrated] {title}",
@@ -584,13 +599,7 @@ def main() -> None:
                 client,
                 "POST",
                 f"/repos/{owner}/{repo}/issues/{pr_number}/comments",
-                json={
-                    "body": (
-                        f"This PR has been migrated to the dissect monorepo: {new_pr_url}\n\n"
-                        f"The original diff and commit history have been preserved on the "
-                        f"`{branch_name}` branch of {origin_owner}/{origin_repo}."
-                    )
-                },
+                json={"body": f"This PR has been migrated to the dissect monorepo: {new_pr_url}"},
             )
             print("Comment posted on original PR.", file=sys.stderr)
 

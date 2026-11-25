@@ -11,12 +11,10 @@ Utilities for one-off operations. These scripts are not deployed to the monorepo
 
 ## migrate_pr.py
 
-Migrates a pull request from a legacy per-project repository to the monorepo.
-It shallow-clones the PR branch into a throwaway directory, rewrites all file paths to
-the monorepo `src`-layout with `git filter-repo`, serialises the rewritten commits as a
-patch mailbox, and applies them with `git am` onto a new branch (preserving author,
-commit message, and timestamps), pushes the branch, opens a draft PR on the monorepo,
-and posts a comment on the original PR.
+Migrates a pull request from a legacy per-project repository to the monorepo. It squashes
+the PR into one commit with the paths rewritten to the monorepo layout, creates that commit
+on a new branch, pushes the branch, opens a draft PR on the monorepo, and posts a comment
+on the original PR.
 
 The PR may be open or closed, and the legacy repository may be archived. Merged PRs are
 refused: their changes are already part of the monorepo.
@@ -72,8 +70,7 @@ author has gone quiet. The author cannot push to the resulting branch; see
 
 - Python 3.11+
 - [`uv`](https://docs.astral.sh/uv/) — used to run the script with its inline dependencies
-- [`git-filter-repo`](https://github.com/newren/git-filter-repo) — path rewriting
-  (`pip install git-filter-repo` or `apt/dnf install git-filter-repo`)
+- [`git-lfs`](https://git-lfs.com) — to carry over test data stored in LFS
 - GitHub auth: either the `gh` CLI (`gh auth login`) or a `GITHUB_TOKEN` environment
   variable holding a classic token with `repo` scope. Fine-grained tokens do not work in
   fork mode: they cannot open PRs or post comments on repositories owned by someone else.
@@ -89,7 +86,8 @@ from inside your clone of the monorepo or of your fork:
 ```sh
 SCRIPT=https://github.com/twiggler/dissect-monorepo/raw/master/utils/migrate_pr.py
 
-# Always dry-run first — prints the mode, file classification and draft PR body, no changes
+# Always dry-run first — shows the mode, the files, the commit and the draft PR body, and
+# checks that the changes apply. Nothing is pushed or created.
 uv run "$SCRIPT" https://github.com/fox-it/dissect.util/pull/42 --dry-run
 
 # Migrate for real
@@ -105,33 +103,44 @@ uv run utils/migrate_pr.py https://github.com/fox-it/dissect.util/pull/42 \
 
 ### What it does
 
-1. Fetches PR metadata and the file list from the GitHub API, and compares `origin` with
-   the target to determine the mode.
-2. Shallow-clones the PR branch (depth = number of commits + 1) into a temp directory.
-3. Rewrites paths with `git filter-repo --filename-callback`:
-   - `dissect/<subpkg>/...` → `projects/<package>/src/dissect/<subpkg>/...`
-   - `tests/...` → `projects/<package>/tests/...`
-   - `tox.ini`, `pyproject.toml` — dropped (replaced/heavily modified during migration)
-   - Anything else — placed under `projects/<package>/` and flagged for review
-   Also injects a `Migrated-from:` trailer into each commit message.
-4. Fetches the monorepo's `main` branch and creates a branch `migrate/<package>/pr-<N>`
-   from its tip, so the state of your local clone does not matter. Serialises the
-   rewritten commits as a patch mailbox with `git format-patch` and applies it with
-   `git am` (pure context matching — no 3-way merge). This works because the patches'
-   context lines come from the rewritten source commits, which match the monorepo
-   verbatim as long as the monorepo is up-to-date with the latest changes from the
-   source repository.
-5. Pushes the branch to `origin` and opens a draft PR on the monorepo titled
-   `[migrated] <original title>`.
+1. Fetches the PR, its commits and its merge base from the GitHub API, and compares
+   `origin` with the target to determine the mode.
+2. Fetches the merge base and the head of the PR into a throwaway bare repository, and
+   rewrites both trees to the monorepo layout:
+   - `dissect/...` → `projects/<package>/src/dissect/...`
+   - everything else → `projects/<package>/...`; root-level files other than `tests/` are
+     flagged for review
+   - changes to paths the migration did not carry over or replaced (`tox.ini`, `.github/`,
+     `.gitignore`, `.git-blame-ignore-revs`, `tests/_docs/Makefile`, `pyproject.toml`)
+     are dropped
+3. Applies the diff between the two trees, which is what GitHub shows under "Files
+   changed", to the target's `main` in a temporary index, and commits it. Your working
+   tree and current branch are not touched.
+4. The commit's author is the PR author, as they appear in their own commits. Other
+   commit authors become `Co-authored-by:` trailers, and the message lists the original
+   commit messages and ends with a `Migrated-from:` trailer.
+5. Creates the local branch `migrate/<package>/pr-<N>`, pushes it to `origin` and opens a
+   draft PR on the target titled `[migrated] <original title>`.
 6. Posts a comment on the original PR with a link to the new draft. This step is skipped
    if the legacy repository is archived, because archived repositories don't accept
    comments.
+
+The PR is always squashed. Replaying its commits one by one fails for PRs that merged the
+legacy default branch into their branch, which about a third of the open PRs did. The
+legacy repositories squash-merge anyway, so the individual commits would not have
+survived the merge.
 
 ### After migration
 
 The resulting PR is a **draft**. Review the diff, address any warnings noted in the
 PR body, then mark it ready for review. The original PR can be closed once the
 migrated one is merged.
+
+To keep working on it, switch to the branch; it tracks `origin`, so `git push` works:
+
+```sh
+git switch migrate/dissect.util/pr-42
+```
 
 In maintainer mode the branch lives in the monorepo, so the PR author cannot push to it.
 To continue the work, the author fetches the branch into a clone of their own fork and
@@ -145,26 +154,13 @@ git push origin <your-branch>
 
 ### Git LFS files
 
-LFS-tracked files are transferred automatically. The script adds the source repository
-as a temporary git remote, runs `git lfs fetch` to pull the objects into the local
-cache, then removes the remote. The standard git-lfs pre-push hook picks them up from
-the cache during `git push` and uploads them to the LFS store of `origin` (in fork mode,
-the fork).
+Only the LFS files the PR adds or changes are downloaded, straight into the LFS store of
+your clone, and uploaded to the LFS store of `origin` (in fork mode, the fork).
 
-No manual steps are required. If `git lfs fetch` encounters an error a warning is
-printed, but the script continues — the branch and PR are still created.
+### When the changes do not apply
 
-### Avoiding conflicts
-
-`git am` uses context matching (not a 3-way merge). The patches apply cleanly as long as
-the files in the monorepo match the content of those files in the source repository at
-the base of the PR. Conflicts can still occur when:
-
-- the PR is based on an old commit of the source repository. Rebase it on the source
-  repository's latest default branch before migrating.
-- the files have changed in the monorepo since the migration. Resolve these by hand.
-
-If `git am` fails, the script aborts the patch series (`git am --abort`) and exits with
-the conflicting patch details, leaving you on the new, empty migration branch. Switch
-back and delete it (`git switch - && git branch -D migrate/<package>/pr-<N>`), fix the
-cause, and re-run the script.
+The diff is applied without a 3-way merge, so it only applies if the files it touches
+are the same in the monorepo as at the PR's merge base. If not, the script stops before
+creating anything and saves the patch in your temp directory. The usual cause is a PR
+based on an old commit: merge the latest default branch of the legacy repository into
+the PR (GitHub's "Update branch" button) and run the script again.
