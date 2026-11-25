@@ -6,7 +6,14 @@
 """Migrate an open PR from a per-project repo to the dissect monorepo.
 
 Usage:
-    uv run utils/migrate_pr.py <pr-url> [--monorepo-path PATH] [--dry-run]
+    uv run utils/migrate_pr.py <pr-url> [--target URL] [--monorepo-path PATH] [--dry-run]
+
+The branch is always pushed to the `origin` remote of the checkout, and the PR is always
+opened on the target (--target, default: the monorepo):
+
+- Fork mode (origin is your fork of the target): no write access to the monorepo is
+  needed, so PR authors can migrate their own PRs and keep pushing to them.
+- Maintainer mode (origin is the target itself).
 
 Always run with --dry-run first to inspect the draft PR body before making any changes.
 """
@@ -24,6 +31,12 @@ from pathlib import Path
 import httpx
 
 GITHUB_API = "https://api.github.com"
+
+# The repository migrated PRs are opened on. Switch to the real monorepo at go-live; until
+# then a default pointing there would let test runs open PRs on the legacy meta-repo.
+DEFAULT_TARGET = "https://github.com/twiggler/dissect-monorepo-test"
+# The monorepo's only branch (see migrate/overwrite_remote.sh).
+MONOREPO_BRANCH = "main"
 
 # Files that exist in the old per-project repos but have no place in the monorepo.
 # Changes to these files in migrated PRs are dropped and noted in the PR body.
@@ -54,7 +67,8 @@ def resolve_token() -> str:
     sys.exit(
         "error: no GitHub token found.\n"
         "  Option 1: run `gh auth login` (gh CLI)\n"
-        "  Option 2: set the GITHUB_TOKEN environment variable"
+        "  Option 2: set the GITHUB_TOKEN environment variable to a classic token with `repo` scope\n"
+        "            (fine-grained tokens cannot open PRs on repositories owned by someone else)"
     )
 
 
@@ -85,8 +99,17 @@ def fetch_pr_files(client: httpx.Client, owner: str, repo: str, pr_number: int) 
     return [f["filename"] for f in api_get(client, f"/repos/{owner}/{repo}/pulls/{pr_number}/files").json()]
 
 
+def fetch_repo(client: httpx.Client, owner: str, repo: str) -> dict:
+    return api_get(client, f"/repos/{owner}/{repo}").json()
+
+
 def fetch_authenticated_user(client: httpx.Client) -> str:
     return api_get(client, "/user").json()["login"]
+
+
+def is_user_account(client: httpx.Client, login: str) -> bool:
+    """Return False for organisations. "Allow edits by maintainers" only works on forks owned by a user."""
+    return api_get(client, f"/users/{login}").json()["type"] == "User"
 
 
 # ── Path classification ───────────────────────────────────────────────────────
@@ -138,6 +161,10 @@ def parse_remote_url(url: str) -> tuple[str, str]:
     sys.exit(f"error: cannot parse GitHub remote URL: {url!r}")
 
 
+def authenticated_url(owner: str, repo: str, token: str) -> str:
+    return f"https://x-access-token:{token}@github.com/{owner}/{repo}.git"
+
+
 def push_url(remote_url: str, token: str) -> str:
     """Return the URL to use for git push; injects token for HTTPS remotes."""
     if remote_url.startswith("git@"):
@@ -160,7 +187,7 @@ def fetch_lfs_objects(
     Adds a temporary remote, runs `git lfs fetch`, then removes the remote.
     The local cache is then picked up by the git-lfs pre-push hook on `git push`.
     """
-    source_url = f"https://x-access-token:{token}@github.com/{source_owner}/{source_repo}.git"
+    source_url = authenticated_url(source_owner, source_repo, token)
     remote_name = "__lfs_source__"
     git(["remote", "add", remote_name, source_url], cwd=cwd)
     try:
@@ -199,7 +226,7 @@ def migrate_commits(
     because its 3-way merge base (boundary_sha, with source-repo paths) differs from
     monorepo HEAD (monorepo paths), causing spurious conflicts on every patched file.
     """
-    source_url = f"https://x-access-token:{token}@github.com/{source_owner}/{source_repo}.git"
+    source_url = authenticated_url(source_owner, source_repo, token)
 
     with tempfile.TemporaryDirectory(prefix="migrate_pr_") as tmp_dir:
         # 1. Shallow-fetch the PR commits into a throwaway repo.
@@ -311,7 +338,7 @@ def migrate_commits(
 def build_pr_body(
     *,
     old_pr_url: str,
-    maintainer_login: str,
+    migrated_by: str,
     contributor_login: str,
     original_body: str,
     package_name: str,
@@ -338,7 +365,7 @@ def build_pr_body(
 
     return (
         f"> [!NOTE]\n"
-        f"> Migrated from {old_pr_url} by @{maintainer_login}.\n"
+        f"> Migrated from {old_pr_url} by @{migrated_by}.\n"
         f"> Original author: @{contributor_login}\n"
         f"\n---\n\n"
         f"{body}\n"
@@ -373,14 +400,21 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Migrate an open GitHub PR from a per-project repo to the dissect monorepo. "
+            "Run from a clone of your fork of the monorepo (fork mode), or from a clone of the "
+            "monorepo itself if you have write access (maintainer mode). "
             "Always run with --dry-run first."
         )
     )
     parser.add_argument("pr_url", metavar="PR_URL", help="Full GitHub URL of the PR to migrate")
     parser.add_argument(
+        "--target",
+        default=DEFAULT_TARGET,
+        help=f"GitHub URL of the repository to open the PR on (default: {DEFAULT_TARGET})",
+    )
+    parser.add_argument(
         "--monorepo-path",
         default=".",
-        help="Path to the monorepo checkout (default: current directory)",
+        help="Path to a clone of the monorepo or of your fork of it (default: current directory)",
     )
     parser.add_argument(
         "--dry-run",
@@ -403,7 +437,9 @@ def main() -> None:
     owner, repo, pr_number = parse_pr_url(args.pr_url)
     package_name = normalize_package_name(repo)
     remote_url = get_remote_url(monorepo_path)
-    monorepo_owner, monorepo_repo = parse_remote_url(remote_url)
+    origin_owner, origin_repo = parse_remote_url(remote_url)
+    target_owner, target_repo = parse_remote_url(args.target)
+    fork_mode = (origin_owner.lower(), origin_repo.lower()) != (target_owner.lower(), target_repo.lower())
 
     token = resolve_token()
     client_headers = {
@@ -420,6 +456,14 @@ def main() -> None:
         contributor_login = pr_data["user"]["login"]
         base_ref = pr_data["base"]["ref"]
         head_sha = pr_data["head"]["sha"]
+        if pr_data["merged_at"]:
+            sys.exit(f"error: {args.pr_url} is already merged, so its changes are part of the monorepo.")
+
+        # Closed PRs and archived repositories can still be migrated: everything the script
+        # reads stays available. Only the comment on the original PR is not possible then.
+        source_archived = fetch_repo(client, owner, repo)["archived"]
+        if source_archived:
+            print(f"Note: {owner}/{repo} is archived; no comment will be posted on the original PR.", file=sys.stderr)
 
         print("Fetching commit list ...", file=sys.stderr)
         commits = fetch_pr_commits(client, owner, repo, pr_number)
@@ -430,7 +474,17 @@ def main() -> None:
         dropped_files = [p for p in filenames if classify_path(p) == "drop"]
         warnings = [p for p in filenames if classify_path(p) == "warn"]
 
-        maintainer_login = fetch_authenticated_user(client)
+        migrated_by = fetch_authenticated_user(client)
+
+        if fork_mode:
+            maintainer_can_modify = is_user_account(client, origin_owner)
+            print(
+                f"Fork mode: pushing to {origin_owner}/{origin_repo}, opening PR on {target_owner}/{target_repo}",
+                file=sys.stderr,
+            )
+        else:
+            maintainer_can_modify = False
+            print(f"Maintainer mode: pushing to and opening PR on {target_owner}/{target_repo}", file=sys.stderr)
 
         if warnings:
             print(
@@ -442,7 +496,7 @@ def main() -> None:
 
         pr_body = build_pr_body(
             old_pr_url=args.pr_url,
-            maintainer_login=maintainer_login,
+            migrated_by=migrated_by,
             contributor_login=contributor_login,
             original_body=original_body,
             package_name=package_name,
@@ -468,8 +522,11 @@ def main() -> None:
         if status.stdout.strip():
             sys.exit("error: monorepo working tree is not clean. Commit or stash your changes first.")
 
-        # Create the migration branch.
-        git(["checkout", "-b", branch_name], cwd=monorepo_path)
+        # Create the migration branch from the tip of the target's default branch rather than
+        # the local HEAD: git am needs an up-to-date monorepo, and a fork may lag behind.
+        print(f"Fetching {MONOREPO_BRANCH} from {target_owner}/{target_repo} ...", file=sys.stderr)
+        git(["fetch", authenticated_url(target_owner, target_repo, token), MONOREPO_BRANCH], cwd=monorepo_path)
+        git(["checkout", "-b", branch_name, "FETCH_HEAD"], cwd=monorepo_path)
 
         # Rewrite paths with filter-repo and apply onto branch.
         migrate_commits(
@@ -499,32 +556,33 @@ def main() -> None:
             sys.exit(f"error: git push failed.\n  git stderr:\n{push_proc.stderr}")
 
         # Phase 4 — open draft PR and notify.
-        print("Opening draft PR on monorepo ...", file=sys.stderr)
-        pr_resp = client.post(
-            f"{GITHUB_API}/repos/{monorepo_owner}/{monorepo_repo}/pulls",
-            json={
-                "title": f"[migrated] {title}",
-                "body": pr_body,
-                "head": branch_name,
-                "base": "main",
-                "draft": True,
-            },
-        )
+        print(f"Opening draft PR on {target_owner}/{target_repo} ...", file=sys.stderr)
+        pr_payload = {
+            "title": f"[migrated] {title}",
+            "body": pr_body,
+            "head": f"{origin_owner}:{branch_name}" if fork_mode else branch_name,
+            "base": MONOREPO_BRANCH,
+            "draft": True,
+        }
+        if maintainer_can_modify:
+            pr_payload["maintainer_can_modify"] = True
+        pr_resp = client.post(f"{GITHUB_API}/repos/{target_owner}/{target_repo}/pulls", json=pr_payload)
         pr_resp.raise_for_status()
         new_pr_url = pr_resp.json()["html_url"]
         print(f"Draft PR created: {new_pr_url}", file=sys.stderr)
 
-        client.post(
-            f"{GITHUB_API}/repos/{owner}/{repo}/issues/{pr_number}/comments",
-            json={
-                "body": (
-                    f"This PR has been migrated to the dissect monorepo: {new_pr_url}\n\n"
-                    f"The original diff and commit history have been preserved on the "
-                    f"`migrate/{package_name}/pr-{pr_number}` branch."
-                )
-            },
-        ).raise_for_status()
-        print("Comment posted on original PR.", file=sys.stderr)
+        if not source_archived:
+            client.post(
+                f"{GITHUB_API}/repos/{owner}/{repo}/issues/{pr_number}/comments",
+                json={
+                    "body": (
+                        f"This PR has been migrated to the dissect monorepo: {new_pr_url}\n\n"
+                        f"The original diff and commit history have been preserved on the "
+                        f"`{branch_name}` branch of {origin_owner}/{origin_repo}."
+                    )
+                },
+            ).raise_for_status()
+            print("Comment posted on original PR.", file=sys.stderr)
 
         print(f"\nDone! Review the draft and un-draft when ready: {new_pr_url}")
 
