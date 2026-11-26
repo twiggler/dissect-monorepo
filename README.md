@@ -12,6 +12,7 @@ template/                ← monorepo template (mirrors the target layout exactl
     tests/integration/   ← integration tests for the monorepo tooling
     doc/                 ← design documentation
   .gitignore             ← monorepo-wide ignore rules (consolidates per-project .gitignore files)
+  README.md              ← monorepo landing page (project overview and table)
   Justfile               ← task runner recipes (test, release, bump, …)
   pyproject.toml         ← workspace config and shared tool settings
   ruff.template.toml     ← linter/formatter config (renamed to ruff.toml on installation)

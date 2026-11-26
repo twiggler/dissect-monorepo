@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Copies (or refreshes) the monorepo-level config files into a target directory.
-# Run this after modifying anything under template/ (Justfile, pyproject.toml,
+# Run this after modifying anything under template/ (README.md, Justfile, pyproject.toml,
 # ruff.toml, .github/**, .monorepo/**) without having to redo the full migration.
 #
 # Usage: ./install_config.sh [TARGET_DIR]
@@ -21,6 +21,7 @@ fi
 echo "Installing config into: $TARGET_DIR"
 
 mkdir -p "$TARGET_DIR/projects"
+cp "$CONFIG_DIR/README.md"          "$TARGET_DIR/README.md"
 cp "$CONFIG_DIR/pyproject.toml"     "$TARGET_DIR/pyproject.toml"
 cp "$CONFIG_DIR/ruff.template.toml" "$TARGET_DIR/ruff.toml"   # Use a different name to avoid conflicts with project-level ruff.toml files.
 cp "$CONFIG_DIR/Justfile"           "$TARGET_DIR/Justfile"
