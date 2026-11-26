@@ -19,9 +19,12 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import logging
 from pathlib import Path
 
 import httpx
+
+logger = logging.getLogger('migrate_pr')
 
 GITHUB_API = "https://api.github.com"
 
@@ -368,8 +371,15 @@ def normalize_package_name(repo: str) -> str:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-
 def main() -> None:
+    """Wrapper around entrypoint to ease logging of subprocess related issues."""
+    try:
+        return entrypoint()
+    except subprocess.CalledProcessError as exc:
+        logger.warning(f"Command %r returned non-zero exit status %s: %s",exc.cmd, exc.returncode, exc.stderr)
+
+
+def entrypoint() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Migrate an open GitHub PR from a per-project repo to the dissect monorepo. "
@@ -387,7 +397,25 @@ def main() -> None:
         action="store_true",
         help="Print the file classification and draft PR body; make no changes",
     )
+    parser.add_argument(
+        "-d",
+        "--debug",
+        help="Logs in debug mode (DEBUG)",
+        action="store_const",
+        dest="loglevel",
+        const=logging.DEBUG,
+        default=logging.WARNING,
+    )
+    parser.add_argument(
+        "-q",
+        "--quiet",
+        help="Logs in quiet mode (WARN)",
+        action="store_const",
+        dest="loglevel",
+        const=logging.WARN,
+    )
     args = parser.parse_args()
+    logger.setLevel(args.loglevel)
 
     # Check for required external tools.
     if subprocess.run(["git", "filter-repo", "--version"], capture_output=True).returncode != 0:
