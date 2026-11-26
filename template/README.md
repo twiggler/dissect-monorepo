@@ -6,11 +6,11 @@ For more information, please see [the documentation](https://docs.dissect.tools/
 
 ## What is Dissect?
 
-Dissect is an incident response framework built from various parsers and implementations of file formats. Tying this all together, Dissect allows you to work with tools named `target-query` and `target-shell` to quickly gain access to forensic artefacts, such as Runkeys, Prefetch files, and Windows Event Logs, just to name a few!
+Dissect is an incident response framework built from various parsers and implementations of file formats. Tying this all together, Dissect allows you to work with tools named `target-query` and `target-shell` to quickly gain access to forensic artefacts, such as Runkeys, Prefetch files, Windows Event Logs, and journald logs, just to name a few!
 
 **Singular approach**
 
-And the best thing: all in a singular way, regardless of underlying container (E01, VMDK, QCoW), filesystem (NTFS, ExtFS, FFS), or Operating System (Windows, Linux, ESXi) structure / combination. You no longer have to bother extracting files from your forensic container, mount them (in case of VMDKs and such), retrieve the MFT, and parse it using a separate tool, to finally create a timeline to analyse. This is all handled under the hood by Dissect in a user-friendly manner.
+And the best thing: all in a singular way, regardless of underlying container (E01, VMDK, QCoW, ...), filesystem (NTFS, ExtFS, FFS, ...), or Operating System (Windows, Linux, ESXi, ...) structure / combination. You no longer have to bother extracting files from your forensic container, mount them (in case of VMDKs and such), retrieve the MFT, and parse it using a separate tool, to finally create a timeline to analyse. This is all handled under the hood by Dissect in a user-friendly manner.
 
 If we take the example above, you can start analysing parsed MFT entries by just using a command like `target-query -f mft <PATH_TO_YOUR_IMAGE>`!
 
@@ -22,9 +22,25 @@ Dissect also provides you with a tool called `acquire`. You can deploy this tool
 
 Dissect is made with a modular approach in mind. This means that each individual project can be used on its own (or in combination) to create a completely new tool for your engagement or future use!
 
+**API first, tool second**
+
+Dissect is not just a set of command line tools. Everything `target-query` and `target-shell` can do is also available as a Python library, so your own scripts can use it directly instead of calling the tools through `subprocess`:
+
+```python
+from dissect.target import Target
+
+t = Target.open("<PATH_TO_YOUR_IMAGE>")
+print(t.hostname, t.os)
+
+for record in t.runkeys():
+    print(record.ts, record.name, record.command)
+```
+
+Read more on the [Python API page](https://docs.dissect.tools/en/latest/advanced/api.html) of the documentation.
+
 **Try it out now!**
 
-Interested in trying it out for yourself? You can simply `pip install dissect` and start using the `target-*` tooling right away. Or you can use the interactive playground at https://try.dissect.tools to try Dissect in your browser.
+Interested in trying it out for yourself? You can simply `pip install dissect` (or use uv, see [Installation](#installation)) and start using the `target-*` tooling right away. Or you can use the interactive playground at https://try.dissect.tools to try Dissect in your browser.
 
 Don’t know where to start? Check out the [introduction page](https://docs.dissect.tools/en/latest/usage/introduction.html).
 
@@ -95,6 +111,12 @@ Information on the supported Python versions can be found in the Getting Started
 
 ```bash
 pip install dissect
+```
+
+If your system doesn't allow installing packages with `pip` (for example, you get an `externally-managed-environment` error), you can use [uv](https://docs.astral.sh/uv/) instead. To run a tool once without installing it:
+
+```bash
+uvx --python 3.12 --from dissect target-query -f mft <PATH_TO_YOUR_IMAGE>
 ```
 
 ## Development instructions
